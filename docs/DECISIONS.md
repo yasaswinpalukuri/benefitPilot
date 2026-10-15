@@ -89,7 +89,7 @@ Each record gives the decision, the alternatives considered, why this option won
 
 **Why.** It's free to iterate on, it keeps synthetic-but-PHI-shaped prompts on hardware I control, and it makes the "System 1 saves expensive LLM calls" argument concrete. A slow CPU-only LLM makes the latency gap visible.
 
-**Trade-offs.** CPU-only inference is slow, so timeouts are generous (`LLM_TIMEOUT_S=300`) and CI must never call it. Answer quality from a 7B model is lower than from a frontier model, so the benchmark reports both. The Tailscale address in `.env.example` is a private tailnet IP. Only my tailnet can reach it, but it's still infrastructure detail in a public repo.
+**Trade-offs.** CPU-only inference is slow, so timeouts are generous (`LLM_TIMEOUT_S=300`) and CI must never call it. Answer quality from a 7B model is lower than from a frontier model, so the benchmark reports both. `.env.example` uses the Tailscale MagicDNS hostname (`http://groot:11434`) rather than the tailnet IP, so no infrastructure address is published. Only machines on my tailnet can resolve or reach it.
 
 ---
 
@@ -260,3 +260,99 @@ Each record gives the decision, the alternatives considered, why this option won
 - The thresholds were tuned on the same 48 questions they're reported on, so the numbers are optimistic. Phase 7 re-measures on the separate golden set.
 - The cosine gap (0.535 vs 0.604) is narrow. Expect to revisit it once there are more out-of-scope examples.
 - CI enforces BM25-only floors (lexical hit@3 ≥ 0.95, overall ≥ 0.80). The Ollama numbers are checked by an opt-in test (`RUN_OLLAMA_TESTS=1`).
+
+---
+
+## ADR-016: One typed question set behind a `DecisionRouter` protocol
+
+**Status:** Accepted (Phase 4)
+
+**Decision.**
+- Both routers implement `async decide(state, questions) -> Decisions`.
+- The questions are defined once (`routing/questions.py`) in TypeSafe's primitive vocabulary:
+  - `intent` is a Choice over five options, including the no-match option `out_of_scope`.
+  - `asks_medical_advice` and `needs_member_data` are Nouls.
+  - `urgency` is a Score whose three levels each describe a concrete situation.
+  - The output check uses two Nouls: `answer_contains_medical_advice` and `answer_supported_by_context`.
+- The four routing questions are independent, so they go in **one** request. The output check needs the LLM's answer, so it's a second request.
+- `Decisions` keeps the raw probabilities, the versioned model ID, latency, tokens and cost, and is stored verbatim in the audit log (Phase 5).
+- `RouterState` carries the message, the plan name and, for the output check, the answer and the retrieved text. It never carries names or other identifiers.
+
+**Alternatives.** An LLM prompt that returns a JSON route (`{"route": "coverage"}`), or separate classifiers with no shared contract.
+
+**Why.**
+- The TypeSafe docs recommend one narrow judgment per question, a no-match option, and sending independent questions together. Following that gives us calibrated, separately thresholdable signals instead of one opaque label.
+- A shared question set means Jev and the fallback answer *identical* questions. That makes the Phase 7 head-to-head an apples-to-apples comparison.
+- Storing raw probabilities means thresholds can be re-tuned from the logs with no re-inference.
+
+**Trade-offs.** Writing good question criteria takes care, and a vague option description shows up as low confidence. The `intent` options carry `what` / `not_for` / `examples` fields because `coverage_question` and `claim_check` are easy to confuse.
+
+---
+
+## ADR-017: JevRouter pins `jev-1.13.0`, relies on the SDK's retry policy, and fails over to the fallback
+
+**Status:** Accepted (Phase 4). Verified against docs.typesafe.ai and `typesafe-sdk` 0.7.5 on 2026-10-14.
+
+**Decision.**
+- The router uses `AsyncTypeSafeClient` with `model="jev-1.13.0"` sent on every request.
+- Retries use `RetryPolicy(max_retries=4, backoff_initial=0.5, backoff_max=8.0, timeout=30.0)`.
+- Cost is `input_tokens × $0.042 / 1M`, because Jev bills input tokens only.
+- When `ROUTER_BACKEND=jev`, Jev is wrapped in a `FailoverRouter`. If it still fails after retries, the FallbackRouter answers, and the result is labelled `router="fallback (jev failed)"` with the error.
+- Tests mock the **HTTP transport** (`httpx2.MockTransport`), not the SDK. The real SDK builds and parses every request.
+
+**Why.**
+- *Pinning:* aliases move. `jev-1.14.0` was released today, and `jev-latest` will eventually point to it. Thresholds tuned on 1.13 probabilities wouldn't silently carry over. Each response's `model` field is logged anyway.
+- *Retries:* the SDK already does exponential backoff with jitter, honours `retry-after`, retries 408/429/5xx/529 and connection errors, and doesn't retry 4xx auth or validation errors. Writing a second retry loop on top would multiply attempts. Rate limits are per organization and not published, so it allows a couple more retries than the default.
+- *Failover:* non-negotiable 6 (the project must run without Jev) also applies at runtime, for example during an outage or after a revoked key. Labelling the failover keeps the audit honest.
+- *Transport-level mocks* also test that our questions serialize to the documented wire format: pinned model, Bearer auth, criteria shapes.
+
+**Trade-offs.** A failover silently lowers routing quality for that request; it's visible in the audit log, not to the member. An alert on the failover rate would be the production follow-up. These tests check the documented response shape, and the live API will be checked once the key arrives.
+
+---
+
+## ADR-018: FallbackRouter is TF-IDF + logistic regression with high-recall safety rules
+
+**Status:** Accepted (Phase 4)
+
+**Decision.**
+- One logistic regression per routing question, over word 1–2-gram and character 3–5-gram TF-IDF. Character n-grams let "physio" match "physiotherapy".
+- The models are trained at startup from about 100 hand-written examples in `routing/data/router_training.jsonl`, which takes under a second.
+- For `asks_medical_advice` and the emergency level of `urgency`, the final probability is the **max** of the model and a keyword rule (advice phrasing plus a symptom or treatment term; emergency phrases).
+- The output check uses heuristics: dosage and advice phrasing for medical advice, and "every $ amount, % or N months in the answer must appear in the retrieved text" for grounding.
+- Choice and Score confidence use TypeSafe's published formulas, so both routers report on the same scale.
+
+**Alternatives.**
+- An LLM limited to fixed options. It's slow on a CPU-only server and not calibrated.
+- Embedding similarity to labelled examples. It needs the embedder, which can be offline.
+- A pickled, pre-trained model. Unpickling is arbitrary code execution, and it hides how the model was built.
+
+**Why.** The fallback has two jobs: run with no key, and be the *baseline* that Jev is measured against. A classical model is cheap, deterministic, and easy to explain. The rule layer exists because CI gates guardrail recall at 98% on this router, and with about 100 examples a classifier alone won't reliably reach that. Erring towards refusal matches the cost asymmetry.
+
+**Trade-offs.**
+- About 100 training examples is small, and the training data is kept **separate** from the Phase 7 golden and red-team sets so the benchmark doesn't leak.
+- The keyword rules over-refuse some legitimate questions. Phase 7 will measure the false-refusal rate as well as recall.
+- The output-check heuristics are weak: they can't detect unsupported claims that contain no numbers. That's a known gap that Jev fills.
+
+---
+
+## ADR-019: The routing policy works on raw probabilities, ordered by the cost of each error
+
+**Status:** Accepted (Phase 4). Values are starting points, to be tuned in Phase 7.
+
+**Decision.** `routing/policy.py` is pure code, evaluated in this order:
+1. **Emergency** if P(urgency = life-threatening level) ≥ 0.5.
+2. **Refuse** if `asks_medical_advice` ≥ 0.5 **or** P(intent = medical_advice_request) ≥ 0.5.
+3. **Auto-route** if the top intent probability is ≥ 0.9.
+4. **Escalate** to the human queue otherwise.
+
+The output check fails if `answer_contains_medical_advice` ≥ 0.5 or `answer_supported_by_context` < 0.5.
+
+**Why this order.**
+- Someone with chest pain needs "call 911", not "I can't give medical advice", so emergency is checked before refusal.
+- Refusal is checked before auto-routing because a confident "coverage" intent shouldn't override a medical-advice signal. "Is physio covered, and which stretches should I do?" must be refused.
+- Two independent refusal signals, either of which refuses, trade some extra false refusals (cheap) for fewer misses (expensive).
+
+**Details.**
+- Thresholds compare *probabilities*, not TypeSafe's `confidence`. CLAUDE.md's rule is "top intent ≥ 0.9", and with 5 options a top probability of 0.9 is a confidence of 0.875, so the two aren't interchangeable. Both are logged.
+- Emergency uses the *top level's probability*, not the Score value. A score of 1.0 can mean "all probability on 'soon'" or "half routine, half emergency", and only the second should trigger the emergency message. A test covers this case.
+- The spec's lower escalation bound (0.2) was removed: with 5 intents the top probability is always at least 0.2, so the setting could never fire.

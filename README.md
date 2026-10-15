@@ -4,7 +4,7 @@ An AI assistant for health-insurance plan members. It answers coverage and benef
 
 > **Synthetic data only.** Every plan, member and claim in this repository is fictional. There is no real personal health information anywhere in the project.
 
-> **Status:** Phase 3 (hybrid retrieval with citations). See [CLAUDE.md](CLAUDE.md) for the build plan and [docs/DECISIONS.md](docs/DECISIONS.md) for architecture decisions.
+> **Status:** Phase 4 (System 1 routing: Jev and a fallback classifier behind one interface). See [CLAUDE.md](CLAUDE.md) for the build plan and [docs/DECISIONS.md](docs/DECISIONS.md) for architecture decisions.
 
 ## Why System 1 / System 2
 
