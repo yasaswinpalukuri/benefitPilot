@@ -4,7 +4,7 @@ An AI assistant for health-insurance plan members. It answers coverage and benef
 
 > **Synthetic data only.** Every plan, member and claim in this repository is fictional. There is no real personal health information anywhere in the project.
 
-> **Status:** Phase 6 (Streamlit UI with the "Why this answer?" panel). See [CLAUDE.md](CLAUDE.md) for the build plan and [docs/DECISIONS.md](docs/DECISIONS.md) for architecture decisions.
+> **Status:** Phases 1–7 built (evaluation harness and CI gates in place). Still to do: measuring Jev (waiting on an API key), the live head-to-head benchmark, and Phase 8 polish. Current results are in [docs/EVAL_REPORT.md](docs/EVAL_REPORT.md). See [CLAUDE.md](CLAUDE.md) for the build plan and [docs/DECISIONS.md](docs/DECISIONS.md) for architecture decisions.
 
 ## Why System 1 / System 2
 
