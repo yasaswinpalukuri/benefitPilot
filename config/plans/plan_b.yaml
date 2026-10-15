@@ -1,0 +1,146 @@
+# PLAN-B "Gold" — machine-readable rules. SYNTHETIC — not a real insurance plan.
+# Must match data/plans/plan_b.md exactly (enforced by tests/test_plan_sync.py).
+plan_id: PLAN-B
+name: Gold
+benefit_year: calendar
+currency: CAD
+
+eligibility:
+  section: "2.2"
+  child_age_limit: 22
+  student_age_limit: 26
+
+deductible:
+  section: "3.1"
+  annual_per_person: 0
+
+groups:
+  drugs:
+    section: "4.1"
+    label: Prescription drugs
+    combined_annual_max: null
+  paramedical:
+    section: "4.2"
+    label: Paramedical services
+    combined_annual_max: null
+  dental:
+    section: "5"
+    label: Dental
+    combined_annual_max: 2500
+
+categories:
+  drug_tier_1:
+    section: "4.1.1"
+    label: Tier 1 drugs (generic)
+    group: drugs
+    coinsurance: 1.00
+    deductible_applies: false
+  drug_tier_2:
+    section: "4.1.2"
+    label: Tier 2 drugs (preferred brand)
+    group: drugs
+    coinsurance: 0.90
+    deductible_applies: false
+  drug_tier_3:
+    section: "4.1.3"
+    label: Tier 3 drugs (non-preferred brand)
+    group: drugs
+    coinsurance: 0.70
+    deductible_applies: false
+
+  physiotherapy:
+    section: "4.2.1"
+    label: Physiotherapy
+    group: paramedical
+    coinsurance: 1.00
+    deductible_applies: false
+    annual_max: 1500
+  chiropractic:
+    section: "4.2.2"
+    label: Chiropractic
+    group: paramedical
+    coinsurance: 1.00
+    deductible_applies: false
+    annual_max: 750
+    per_visit_max: 60
+  massage_therapy:
+    section: "4.2.3"
+    label: Massage therapy
+    group: paramedical
+    coinsurance: 1.00
+    deductible_applies: false
+    annual_max: 750
+    per_visit_max: 75
+  psychology:
+    section: "4.2.4"
+    label: Psychology
+    group: paramedical
+    coinsurance: 1.00
+    deductible_applies: false
+    annual_max: 2000
+
+  eye_exam:
+    section: "4.3.1"
+    label: Eye exams
+    coinsurance: 1.00
+    deductible_applies: false
+    per_visit_max: 120
+    frequency: { count: 1, months: 12 }
+  eyewear:
+    section: "4.3.2"
+    label: Glasses and contact lenses
+    coinsurance: 1.00
+    deductible_applies: false
+    per_visit_max: 400
+    frequency: { count: 1, months: 24 }
+
+  travel_emergency:
+    section: "4.4"
+    label: Emergency travel medical
+    coinsurance: 1.00
+    deductible_applies: false
+    per_trip_max: 5000000
+    max_trip_days: 60
+
+  dental_basic:
+    section: "5.1"
+    label: Basic dental
+    group: dental
+    coinsurance: 1.00
+    deductible_applies: false
+  dental_major:
+    section: "5.2"
+    label: Major dental
+    group: dental
+    coinsurance: 0.60
+    deductible_applies: false
+  orthodontics:
+    section: "5.3"
+    label: Orthodontics
+    coinsurance: 0.50
+    deductible_applies: false
+    age_limit: 19
+    lifetime_max: 2500
+
+waiting_periods:
+  section: "7"
+  months:
+    dental_major: 6
+    orthodontics: 12
+
+preauthorization:
+  section: "6"
+  thresholds:
+    dental_major: 1000
+    orthodontics: 0
+    drug_tier_3: 0
+
+exclusions:
+  section: "8"
+  items:
+    - code: cosmetic_dental
+      label: Cosmetic dental procedures, including teeth whitening
+    - code: laser_eye_surgery
+      label: Laser eye surgery
+    - code: experimental_treatment
+      label: Experimental or investigational treatment

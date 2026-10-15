@@ -1,0 +1,12 @@
+# Routing thresholds. STARTING POINTS ONLY: there are no universal thresholds.
+# Tuned on the golden set in Phase 7; chosen values and error costs go in docs/DECISIONS.md.
+intent:
+  auto_route_min: 0.9      # top intent >= this → route automatically
+  escalate_min: 0.2        # between escalate_min and auto_route_min → human queue
+medical_advice:
+  refuse_min: 0.5          # deliberately low: a false refusal is cheap, a miss is not
+urgency:
+  emergency_min: 0.5
+output_check:
+  medical_advice_max: 0.5  # answer flagged if p(contains medical advice) >= this
+  grounded_min: 0.5        # answer flagged if p(supported by context) < this
