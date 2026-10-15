@@ -184,3 +184,79 @@ Each record gives the decision, the alternatives considered, why this option won
 **Why.** Each limit is a deliberate, tested boundary rather than an accident. The tests cover the day before, the day of and the day after for frequency, waiting periods and age limits.
 
 **Trade-offs.** Rules like "2 massages per month" would need a service-history table. That's a natural extension, but no plan here needs it.
+
+---
+
+## ADR-013: One chunk per plan section; the chunk ID is the citation ID
+
+**Status:** Accepted (Phase 3)
+
+**Decision.**
+- Each `§` section with its own body text becomes one chunk, with ID `PLAN-A §4.2.1`.
+- The indexed text starts with the plan name, the section heading and its parent headings ("Part of: §4 Health benefits > §4.2 Paramedical services").
+- Tables are flattened to `label: value` lines for indexing, and the original Markdown is kept for display.
+- Heading-only sections (§4, §10) aren't chunks; they appear as context in their children.
+- The synthetic-data banner isn't indexed.
+
+**Alternatives.** Fixed-size token windows with overlap, or recursive character splitting.
+
+**Why.**
+- Plan booklets are already split into self-contained, citable units. A fixed window would cut "Annual maximum: $500" away from "Physiotherapy", or merge two benefits into one chunk, and then a citation would point at the wrong rule.
+- Making the citation the ID means grounding needs no lookup table.
+- Parent headings fix the "short leaf section" problem: §4.2.1 alone never says "paramedical".
+
+**Trade-offs.** Chunk sizes are uneven (§8 Exclusions is long, §4.1.1 is two lines). That's fine at about 60 chunks. Long real booklets would need a size cap that splits *within* a section while keeping the same citation.
+
+---
+
+## ADR-014: nomic-embed-text over Ollama, an in-memory numpy index, and BM25-only as the offline mode
+
+**Status:** Accepted (Phase 3). Changes the stack table: no Chroma/pgvector and no sentence-transformers.
+
+**Decision.**
+- Embeddings come from `nomic-embed-text` on the home Ollama server through `/api/embed`, with nomic's `search_document:` / `search_query:` task prefixes.
+- Document vectors are cached on disk, keyed by sha256(model + text).
+- The "vector store" is a normalized numpy matrix, where a dot product gives the cosine.
+- With `EMBEDDINGS_BACKEND=none` (the default, used by CI) retrieval is BM25-only.
+- If Ollama is configured but unreachable, retrieval degrades to BM25 and sets a `degraded` reason instead of failing the request.
+
+**Alternatives.**
+- *Chroma or pgvector.* Real services with persistence and ANN indexes, but pointless for 63 vectors, and one more container to run.
+- *sentence-transformers in-process.* This adds about 2 GB of torch to the image, and the user already runs nomic on the home server.
+- *A deterministic "hashing" embedder for offline use.* I built and measured this one. It made results **worse** than BM25 alone (hit@3 0.77 vs 0.86) because its "similarities" are noise that RRF then trusts, so I removed it. Fusion mechanics are unit-tested with a small stub embedder instead.
+
+**Why.** It's the simplest thing that's correct at this scale, and it keeps CI offline. Degrading gracefully matters because the embedder runs on a home server reached over Tailscale.
+
+**Trade-offs.** At thousands of chunks or multiple tenants, swap the matrix for pgvector. The `HybridRetriever` interface wouldn't change. The cache file must be invalidated if the model changes, which is handled because the model name is part of the key.
+
+---
+
+## ADR-015: RRF fusion where only meaningful BM25 matches vote; a cosine-based relevance gate
+
+**Status:** Accepted (Phase 3). Thresholds are provisional and will be re-checked on the Phase 7 golden set.
+
+**Decision.**
+- Fusion is reciprocal-rank fusion (`k=60`) over the top 20 of each retriever.
+- Only BM25 hits scoring ≥ `min_bm25` (4.0) get a vote. Ties go to the better vector rank.
+- A separate **relevance gate** decides whether to answer at all: top cosine ≥ `min_cosine` (0.57) when vectors exist, otherwise top BM25 ≥ `min_bm25`.
+- When the gate fails, the answer must be "I couldn't find that in your plan". Hits are still returned for the audit log.
+
+**What I measured** (`python scripts/eval_retrieval.py`, 48 questions: 28 lexical, 15 paraphrase, 5 out of scope; nomic-embed-text on the home server):
+
+| Variant | hit@1 | hit@3 | MRR | Gate accuracy |
+|---|---|---|---|---|
+| BM25 only | 0.70 | 0.86 | 0.78 | 0.69 |
+| Vector only | 0.95 | 1.00 | 0.97 | 1.00 |
+| Hybrid, plain RRF, BM25-or-cosine gate (first version; measured on the earlier 45-question set) | 0.88 | 0.95 | 0.91 | 0.93 |
+| **Hybrid, gated BM25 votes, cosine gate (chosen)** | **0.93** | **1.00** | **0.96** | **1.00** |
+
+**Why.**
+- *Plain RRF hurt.* On paraphrases ("new specs", "my son in university"), BM25's top hits came from generic words ("plan", "benefits") with scores around 3. Any chunk in both lists beat the vector's correct top-1. Letting only meaningful lexical matches vote fixed this without dropping BM25 for exact rare terms.
+- *BM25 can't gate relevance.* "Write me a poem **about** the ocean" scored 3.9 (it matched "§1 **About** this plan"), while "What is the deductible?" scored 1.5. Cosine separated the two groups cleanly: every answerable question scored ≥ 0.604 and every out-of-scope one ≤ 0.535. 0.57 is the midpoint.
+- RRF uses ranks only, so BM25 scores (unbounded) and cosines never need to be put on one scale.
+
+**Trade-offs and honesty notes.**
+- On this corpus, vector search alone is as good as hybrid (hit@1 0.95 vs 0.93). I keep hybrid for three reasons: exact-term robustness as booklets grow, the BM25 fallback when the embedder is down, and because it's cheap.
+- The thresholds were tuned on the same 48 questions they're reported on, so the numbers are optimistic. Phase 7 re-measures on the separate golden set.
+- The cosine gap (0.535 vs 0.604) is narrow. Expect to revisit it once there are more out-of-scope examples.
+- CI enforces BM25-only floors (lexical hit@3 ≥ 0.95, overall ≥ 0.80). The Ollama numbers are checked by an opt-in test (`RUN_OLLAMA_TESTS=1`).

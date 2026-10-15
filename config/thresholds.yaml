@@ -7,6 +7,11 @@ medical_advice:
   refuse_min: 0.5          # deliberately low: a false refusal is cheap, a miss is not
 urgency:
   emergency_min: 0.5
+retrieval:
+  rrf_k: 60                # standard RRF constant
+  candidates: 20           # per-retriever depth fed into fusion
+  min_bm25: 4.0            # "meaningful" lexical match: may vote in fusion; gate when offline
+  min_cosine: 0.57         # relevance gate with nomic-embed-text (see ADR-015)
 output_check:
   medical_advice_max: 0.5  # answer flagged if p(contains medical advice) >= this
   grounded_min: 0.5        # answer flagged if p(supported by context) < this

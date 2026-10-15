@@ -33,7 +33,11 @@ class Settings(BaseSettings):
     llm_timeout_s: float = 300.0
     anthropic_api_key: SecretStr | None = None
 
+    # none: BM25-only retrieval, no network (tests/CI default).
+    embeddings_backend: Literal["ollama", "none"] = "none"
+
     db_path: Path = REPO_ROOT / "data" / "benefitpilot.db"
+    cache_dir: Path = REPO_ROOT / "data" / "cache"
 
 
 @lru_cache

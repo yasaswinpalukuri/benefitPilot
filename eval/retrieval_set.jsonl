@@ -1,0 +1,48 @@
+{"id": "r01", "kind": "lexical", "plan_id": "PLAN-A", "question": "Is physiotherapy covered under my plan?", "expected": ["PLAN-A §4.2.1"]}
+{"id": "r02", "kind": "lexical", "plan_id": "PLAN-B", "question": "Is physiotherapy covered under my plan?", "expected": ["PLAN-B §4.2.1"]}
+{"id": "r03", "kind": "lexical", "plan_id": "PLAN-A", "question": "What is the annual maximum for chiropractic?", "expected": ["PLAN-A §4.2.2"]}
+{"id": "r04", "kind": "lexical", "plan_id": "PLAN-B", "question": "How much does the plan pay for massage therapy per visit?", "expected": ["PLAN-B §4.2.3"]}
+{"id": "r05", "kind": "lexical", "plan_id": "PLAN-A", "question": "Does my plan cover psychology sessions?", "expected": ["PLAN-A §4.2.4"]}
+{"id": "r06", "kind": "lexical", "plan_id": "PLAN-A", "question": "How often can I get an eye exam?", "expected": ["PLAN-A §4.3.1"]}
+{"id": "r07", "kind": "lexical", "plan_id": "PLAN-B", "question": "How much can I claim for glasses or contact lenses?", "expected": ["PLAN-B §4.3.2"]}
+{"id": "r08", "kind": "lexical", "plan_id": "PLAN-A", "question": "What does emergency travel medical cover?", "expected": ["PLAN-A §4.4"]}
+{"id": "r09", "kind": "lexical", "plan_id": "PLAN-A", "question": "What is the deductible?", "expected": ["PLAN-A §3.1"]}
+{"id": "r10", "kind": "lexical", "plan_id": "PLAN-A", "question": "Is orthodontics covered?", "expected": ["PLAN-A §8"]}
+{"id": "r11", "kind": "lexical", "plan_id": "PLAN-B", "question": "Is orthodontics covered?", "expected": ["PLAN-B §5.3"]}
+{"id": "r12", "kind": "lexical", "plan_id": "PLAN-A", "question": "What is the waiting period for major dental?", "expected": ["PLAN-A §7", "PLAN-A §5.2"]}
+{"id": "r13", "kind": "lexical", "plan_id": "PLAN-B", "question": "Which services need pre-authorization?", "expected": ["PLAN-B §6"]}
+{"id": "r14", "kind": "lexical", "plan_id": "PLAN-A", "question": "How do I submit a claim?", "expected": ["PLAN-A §10.1"]}
+{"id": "r15", "kind": "lexical", "plan_id": "PLAN-B", "question": "What is the deadline to submit a claim?", "expected": ["PLAN-B §10.2"]}
+{"id": "r16", "kind": "lexical", "plan_id": "PLAN-A", "question": "How does coordination of benefits work if my spouse has another plan?", "expected": ["PLAN-A §9"]}
+{"id": "r17", "kind": "lexical", "plan_id": "PLAN-A", "question": "Until what age are dependent children covered?", "expected": ["PLAN-A §2.2"]}
+{"id": "r18", "kind": "lexical", "plan_id": "PLAN-B", "question": "Are tier 3 drugs covered?", "expected": ["PLAN-B §4.1.3"]}
+{"id": "r19", "kind": "lexical", "plan_id": "PLAN-A", "question": "What is the combined annual maximum for dental?", "expected": ["PLAN-A §5"]}
+{"id": "r20", "kind": "lexical", "plan_id": "PLAN-A", "question": "Is teeth whitening covered?", "expected": ["PLAN-A §8"]}
+{"id": "r21", "kind": "lexical", "plan_id": "PLAN-B", "question": "Is laser eye surgery covered?", "expected": ["PLAN-B §8"]}
+{"id": "r22", "kind": "lexical", "plan_id": "PLAN-A", "question": "How do I appeal a declined claim?", "expected": ["PLAN-A §10.4"]}
+{"id": "r23", "kind": "lexical", "plan_id": "PLAN-A", "question": "What percentage does the plan pay for generic drugs?", "expected": ["PLAN-A §4.1.1"]}
+{"id": "r24", "kind": "lexical", "plan_id": "PLAN-B", "question": "Is a root canal covered?", "expected": ["PLAN-B §5.2"]}
+{"id": "r25", "kind": "lexical", "plan_id": "PLAN-A", "question": "Are fillings covered?", "expected": ["PLAN-A §5.1"]}
+{"id": "p01", "kind": "paraphrase", "plan_id": "PLAN-A", "question": "Can I get reimbursed for seeing someone about my anxiety?", "expected": ["PLAN-A §4.2.4"]}
+{"id": "p02", "kind": "paraphrase", "plan_id": "PLAN-B", "question": "My kid needs braces, will insurance help pay?", "expected": ["PLAN-B §5.3"]}
+{"id": "p03", "kind": "paraphrase", "plan_id": "PLAN-A", "question": "I broke my leg skiing in Colorado, am I covered?", "expected": ["PLAN-A §4.4"]}
+{"id": "p04", "kind": "paraphrase", "plan_id": "PLAN-A", "question": "How much do I pay out of pocket before the insurance kicks in?", "expected": ["PLAN-A §3.1"]}
+{"id": "p05", "kind": "paraphrase", "plan_id": "PLAN-B", "question": "Does the plan help with the cost of new specs?", "expected": ["PLAN-B §4.3.2"]}
+{"id": "p06", "kind": "paraphrase", "plan_id": "PLAN-A", "question": "I just joined the company. Can I get a crown done right away?", "expected": ["PLAN-A §7", "PLAN-A §5.2"]}
+{"id": "p07", "kind": "paraphrase", "plan_id": "PLAN-A", "question": "Is my 23-year-old son in university still on my benefits?", "expected": ["PLAN-A §2.2"]}
+{"id": "p08", "kind": "paraphrase", "plan_id": "PLAN-B", "question": "Can I get my back adjusted by a chiro?", "expected": ["PLAN-B §4.2.2"]}
+{"id": "p09", "kind": "paraphrase", "plan_id": "PLAN-A", "question": "What happens if my wife and I both have insurance through work?", "expected": ["PLAN-A §9"]}
+{"id": "p10", "kind": "paraphrase", "plan_id": "PLAN-B", "question": "Will you pay for an expensive brand-name medicine that isn't on your list?", "expected": ["PLAN-B §4.1.3"]}
+{"id": "p11", "kind": "paraphrase", "plan_id": "PLAN-A", "question": "Is there a yearly cap on physio?", "expected": ["PLAN-A §4.2.1"]}
+{"id": "p12", "kind": "paraphrase", "plan_id": "PLAN-B", "question": "Do I need approval before getting dentures?", "expected": ["PLAN-B §6", "PLAN-B §5.2"]}
+{"id": "p13", "kind": "paraphrase", "plan_id": "PLAN-A", "question": "How much will I get back for a massage?", "expected": ["PLAN-A §4.2.3"]}
+{"id": "p14", "kind": "paraphrase", "plan_id": "PLAN-A", "question": "Does insurance pay for a checkup with my optometrist?", "expected": ["PLAN-A §4.3.1"]}
+{"id": "p15", "kind": "paraphrase", "plan_id": "PLAN-B", "question": "Is my mental health counselling paid for?", "expected": ["PLAN-B §4.2.4"]}
+{"id": "n01", "kind": "none", "plan_id": "PLAN-A", "question": "What's the capital of France?", "expected": []}
+{"id": "n02", "kind": "none", "plan_id": "PLAN-B", "question": "Can you recommend a good pizza place nearby?", "expected": []}
+{"id": "n03", "kind": "none", "plan_id": "PLAN-A", "question": "Write me a poem about the ocean.", "expected": []}
+{"id": "n04", "kind": "none", "plan_id": "PLAN-B", "question": "Who won the hockey game last night?", "expected": []}
+{"id": "n05", "kind": "none", "plan_id": "PLAN-A", "question": "How do I reset my email password?", "expected": []}
+{"id": "r26", "kind": "lexical", "plan_id": "PLAN-A", "question": "Does the plan cover naturopathic services?", "expected": ["PLAN-A §8"]}
+{"id": "r27", "kind": "lexical", "plan_id": "PLAN-B", "question": "Can a denturist do the work?", "expected": ["PLAN-B §5"]}
+{"id": "r28", "kind": "lexical", "plan_id": "PLAN-B", "question": "Can I see an ophthalmologist for a routine exam?", "expected": ["PLAN-B §4.3.1"]}

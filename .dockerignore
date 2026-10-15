@@ -8,3 +8,4 @@
 data/*.db
 data/audit
 data/chroma
+data/cache

@@ -4,7 +4,7 @@ An AI assistant for health-insurance plan members. It answers coverage and benef
 
 > **Synthetic data only.** Every plan, member and claim in this repository is fictional. There is no real personal health information anywhere in the project.
 
-> **Status:** Phase 2 (rules engine and `/claims/check`). See [CLAUDE.md](CLAUDE.md) for the build plan and [docs/DECISIONS.md](docs/DECISIONS.md) for architecture decisions.
+> **Status:** Phase 3 (hybrid retrieval with citations). See [CLAUDE.md](CLAUDE.md) for the build plan and [docs/DECISIONS.md](docs/DECISIONS.md) for architecture decisions.
 
 ## Why System 1 / System 2
 
@@ -56,6 +56,22 @@ curl -X POST localhost:8000/claims/check -H "Content-Type: application/json" \
 ```
 
 The response gives the outcome (`approve` / `partial` / `deny`), the covered amount, what the member pays, the violations, and every rule checked with its plan citation. For example: the plan share is $96.00, and the $500 annual maximum (with $420 already used) reduces it to $80.00, citing `PLAN-A §4.2.1`. Interactive docs are at `/docs`.
+
+## Retrieval
+
+Plan booklets are chunked one section per chunk, and the chunk ID *is* the citation (`PLAN-A §4.2.1`). Search combines BM25 and nomic-embed-text vectors with reciprocal-rank fusion. A cosine-based relevance gate decides whether the plan answers the question at all.
+
+| Retrieval (48 questions) | hit@1 | hit@3 | Gate accuracy |
+|---|---|---|---|
+| BM25 only (offline/CI mode) | 0.70 | 0.86 | 0.69 |
+| Hybrid with nomic-embed-text | 0.93 | 1.00 | 1.00 |
+
+```bash
+python scripts/eval_retrieval.py                 # with EMBEDDINGS_BACKEND=ollama in .env
+python scripts/eval_retrieval.py --backend none  # BM25 only, offline
+```
+
+Details and caveats are in [ADR-015](docs/DECISIONS.md).
 
 ## Data
 

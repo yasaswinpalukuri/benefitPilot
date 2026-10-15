@@ -10,6 +10,7 @@ data/*.db
 data/*.db-journal
 data/audit/
 data/chroma/
+data/cache/
 
 # Python
 __pycache__/
