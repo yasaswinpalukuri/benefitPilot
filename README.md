@@ -4,7 +4,7 @@ An AI assistant for health-insurance plan members. It answers coverage and benef
 
 > **Synthetic data only.** Every plan, member and claim in this repository is fictional. There is no real personal health information anywhere in the project.
 
-> **Status:** Phase 1 (scaffold and synthetic data). See [CLAUDE.md](CLAUDE.md) for the build plan and [docs/DECISIONS.md](docs/DECISIONS.md) for architecture decisions.
+> **Status:** Phase 2 (rules engine and `/claims/check`). See [CLAUDE.md](CLAUDE.md) for the build plan and [docs/DECISIONS.md](docs/DECISIONS.md) for architecture decisions.
 
 ## Why System 1 / System 2
 
@@ -46,6 +46,16 @@ With Docker:
 ```bash
 docker compose up --build         # API on http://localhost:8000/health
 ```
+
+## Check a claim (rules engine only, no LLM)
+
+```bash
+uvicorn benefitpilot.api.app:app --reload
+curl -X POST localhost:8000/claims/check -H "Content-Type: application/json" \
+  -d '{"member_id": "M021", "category": "physiotherapy", "amount": "120", "date": "2026-10-15"}'
+```
+
+The response gives the outcome (`approve` / `partial` / `deny`), the covered amount, what the member pays, the violations, and every rule checked with its plan citation. For example: the plan share is $96.00, and the $500 annual maximum (with $420 already used) reduces it to $80.00, citing `PLAN-A §4.2.1`. Interactive docs are at `/docs`.
 
 ## Data
 

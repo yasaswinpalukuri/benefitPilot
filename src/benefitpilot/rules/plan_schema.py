@@ -11,6 +11,7 @@ Conventions (also stated in docs/DECISIONS.md, ADR-005):
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -23,7 +24,9 @@ class _Strict(BaseModel):
 
 
 class Frequency(_Strict):
-    count: int = Field(gt=0)
+    # Only "1 per N months" is supported: usage stores the last service date,
+    # not a full service history (docs/DECISIONS.md, ADR-012).
+    count: Literal[1]
     months: int = Field(gt=0)
 
 

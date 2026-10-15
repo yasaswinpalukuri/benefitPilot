@@ -116,3 +116,71 @@ Each record gives the decision, the alternatives considered, why this option won
 **Why.** It proves that `docker compose up` works on day one and gives CI a Docker build job, so packaging problems show up early instead of in Phase 8.
 
 **Trade-offs.** It's a tiny bit of code before it's needed.
+
+---
+
+## ADR-009: The rules engine is a pure function over a member snapshot
+
+**Status:** Accepted (Phase 2)
+
+**Decision.** `check_claim(plan, member_snapshot, claim) -> ClaimResult` does no I/O, makes no model calls and mutates nothing. A separate `MemberStore` turns SQLite rows into a frozen `MemberSnapshot` for one benefit year.
+
+**Alternatives.**
+- *An engine that queries the database itself.* This is shorter, but every test needs a database, and "what did the engine see?" becomes hard to answer.
+- *A rule-engine library* (durable-rules, or a Drools-style engine). It brings its own DSL and runtime for roughly 15 rules that are clearer as plain Python.
+
+**Why.** Testability and auditability. Every engine test builds its input by hand and states the expected dollar amount, so the tests read like a worked example from a benefits booklet. In Phase 5, the snapshot plus the result is exactly what goes into the audit log: you can replay any decision without the database.
+
+**Trade-offs.** The caller has to build the right snapshot (the right benefit year), so the engine refuses mismatched years and plans instead of silently using the wrong usage.
+
+---
+
+## ADR-010: Money is `Decimal`, rounded half-up to cents; maximums are applied in a fixed order
+
+**Status:** Accepted (Phase 2)
+
+**Decision.**
+- All amounts are `decimal.Decimal`. Values from YAML and SQLite go through `str()` first, so 420.1 becomes `Decimal("420.1")` and not its binary approximation.
+- The plan share is computed as (billed − deductible) × coinsurance and rounded half-up to cents once.
+- Caps then apply in a fixed order: per-visit → per-trip → annual → combined group → lifetime. Each cap that binds lowers the payment and is reported.
+- The API returns money as JSON strings ("80.00").
+
+**Why.** `10.05 × 0.70` is exactly 7.035. With floats it becomes 7.03499…, which rounds to 7.03. With `Decimal` it's 7.035, which rounds to 7.04. A test covers this case. Applying caps in a fixed order makes "why was I paid $20?" answerable step by step (56 → 40 per-visit → 20 annual).
+
+**Trade-offs.** `Decimal` is slower and more verbose than float, which doesn't matter at this scale. SQLite stores usage as REAL. That's safe for 2-decimal synthetic values because of the `str()` conversion, but integer cents would be more robust if this moved to Postgres.
+
+---
+
+## ADR-011: Report every rule checked, not just the first failure; `/claims/check` is read-only
+
+**Status:** Accepted (Phase 2)
+
+**Decision.**
+- Excluded or unknown services stop evaluation right away, since no other rule is meaningful for them.
+- Otherwise every applicable rule is evaluated and returned as a `RuleCheck` (rule, passed, effect, detail, citation, violation). A rule's effect is `deny` (the claim isn't payable), `reduce` (a cap lowers the payment) or `info` (the deductible).
+- Outcome: **deny** if any deny-type rule failed, or a cap reduced the payment to $0. **partial** if a cap reduced it. **approve** otherwise.
+- A claim fully absorbed by the deductible is *approved at $0*, not denied, because no rule was broken.
+- The endpoint opens SQLite with `mode=ro`. It answers "what would happen", and doesn't adjudicate or update usage.
+- An unknown category is a 422 listing the valid ones (a client typo). An excluded category is a normal 200 denial (a real answer).
+
+**Alternatives.** Fail fast on the first violation, which is simpler. Or have the endpoint post the claim and update usage, like a real adjudicator.
+
+**Why.** The "Why this answer?" panel and the audit log need the whole picture. A member with two problems should learn both at once. A read-only check is safe to call from the chat flow in Phase 5 without side effects.
+
+**Trade-offs.** The responses are larger. Real adjudication (posting claims, coordination of benefits, appeals) is out of scope and is listed under limitations.
+
+---
+
+## ADR-012: Scope limits of the Phase 2 engine
+
+**Status:** Accepted (Phase 2)
+
+**Decision.**
+- Frequency limits are "1 per N months" only. The schema enforces `count: 1` because usage stores the last service date, not a full service history.
+- The pre-authorization threshold is strict: "over $500" means $500.00 doesn't need one.
+- Age limits are evaluated on the service date, and the birthday counts: a child turning 21 that day is no longer "under 21".
+- `/claims/check` takes two optional fields beyond the original spec, `preauth_on_file` (default false) and `trip_days` (required for travel claims). Without them, two of the plan rules couldn't be checked.
+
+**Why.** Each limit is a deliberate, tested boundary rather than an accident. The tests cover the day before, the day of and the day after for frequency, waiting periods and age limits.
+
+**Trade-offs.** Rules like "2 massages per month" would need a service-history table. That's a natural extension, but no plan here needs it.

@@ -1,14 +1,11 @@
-"""FastAPI application.
-
-Phase 1 exposes only /health so `docker compose up` has something to run;
-the real endpoints arrive in Phases 2 and 5.
-"""
+"""FastAPI application. /ask, /audit and /escalations arrive in Phase 5."""
 
 from __future__ import annotations
 
 from fastapi import FastAPI
 
 from benefitpilot import __version__
+from benefitpilot.api import claims
 from benefitpilot.config import get_settings
 
 app = FastAPI(
@@ -16,6 +13,7 @@ app = FastAPI(
     version=__version__,
     description="Coverage answers and plan-rule checks. Synthetic data only.",
 )
+app.include_router(claims.router)
 
 
 @app.get("/health")
