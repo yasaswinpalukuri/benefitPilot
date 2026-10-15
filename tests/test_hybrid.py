@@ -65,7 +65,9 @@ class StubEmbedder:
 
 
 CHUNKS = chunk_markdown(BOOKLET) + chunk_markdown(OTHER)
-CFG = RetrievalConfig(min_bm25=1.0, min_cosine=0.5)  # tiny corpus, small BM25 scores
+CFG = RetrievalConfig(
+    min_bm25=1.0, min_bm25_gate=1.0, min_cosine=0.5
+)  # tiny corpus, small BM25 scores
 
 
 def retriever(embedder=None, cfg=CFG):
@@ -85,7 +87,7 @@ def test_vectors_catch_paraphrases_bm25_misses():
 
 def test_weak_lexical_matches_do_not_outvote_vectors():
     # "plan"/"cover" match §3 lexically (weakly); the meaning is vision.
-    r = retriever(cfg=RetrievalConfig(min_bm25=100.0, min_cosine=0.5))
+    r = retriever(cfg=RetrievalConfig(min_bm25=100.0, min_bm25_gate=1.0, min_cosine=0.5))
     res = r.search("does the plan cover specs", plan_id="PLAN-T")
     assert res.citations[0] == "PLAN-T §1"
     general = next(h for h in res.hits if h.citation == "PLAN-T §3")

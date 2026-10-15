@@ -27,6 +27,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import FeatureUnion, Pipeline
 
+from benefitpilot.guardrails.grounding import unsupported_numbers
 from benefitpilot.routing.confidence import choice_confidence, score_confidence
 from benefitpilot.routing.questions import INTENTS
 from benefitpilot.routing.types import (
@@ -65,7 +66,7 @@ ANSWER_ADVICE = (
     r"\b(you should|i recommend|i'd recommend|try taking|take \d|take (some|an?)\b)|"
     r"\b\d+\s?mg\b|\b(ibuprofen|acetaminophen|tylenol|advil|antibiotic)\b"
 )
-NUMBER = r"\$[\d,]+(?:\.\d+)?|\b\d+(?:\.\d+)?\s?%|\b\d+\s+(?:months?|days?)\b"
+DURATION = r"\b\d+\s+(?:months?|days?)\b"
 
 
 def _rx(pattern: str) -> re.Pattern[str]:
@@ -73,7 +74,7 @@ def _rx(pattern: str) -> re.Pattern[str]:
 
 
 SYMPTOM_RX, TREATMENT_RX, ADVICE_RX = _rx(SYMPTOM), _rx(TREATMENT), _rx(ADVICE)
-EMERGENCY_RX, ANSWER_ADVICE_RX, NUMBER_RX = _rx(EMERGENCY), _rx(ANSWER_ADVICE), _rx(NUMBER)
+EMERGENCY_RX, ANSWER_ADVICE_RX, DURATION_RX = _rx(EMERGENCY), _rx(ANSWER_ADVICE), _rx(DURATION)
 
 
 def medical_rule(text: str) -> float:
@@ -85,6 +86,43 @@ def medical_rule(text: str) -> float:
 
 def emergency_rule(text: str) -> float:
     return 0.9 if EMERGENCY_RX.search(text) else 0.0
+
+
+CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "physiotherapy": ("physio",),
+    "chiropractic": ("chiro",),
+    "massage_therapy": ("massage",),
+    "psychology": ("psycholog", "therap", "counsel"),
+    "eye_exam": ("eye exam", "optometrist", "ophthalmologist"),
+    "eyewear": ("glasses", "contacts", "contact lens", "eyewear", "frames"),
+    "travel_emergency": ("travel", "abroad", "trip", "out of province"),
+    "dental_basic": ("cleaning", "filling", "checkup", "x-ray", "extraction"),
+    "dental_major": ("crown", "bridge", "denture", "root canal"),
+    "orthodontics": ("braces", "orthodont", "aligner", "invisalign"),
+    "cosmetic_dental": ("whitening", "cosmetic"),
+    "laser_eye_surgery": ("laser", "lasik"),
+    "naturopathy": ("naturopath",),
+    "experimental_treatment": ("experimental",),
+    "drug_tier_1": ("generic",),
+}
+COST_WORDS = re.compile(
+    r"session|visit|bill|claim|cost|charge|receipt|appointment|pair|"
+    r"crown|treatment|will|would|next|new",
+    re.IGNORECASE,
+)
+SPENT_WORDS = re.compile(r"used|spent|already|so far|this year|claimed", re.IGNORECASE)
+
+
+def _pick(options: list[str], chosen: str, p: float = 0.9) -> ChoiceDecision:
+    if chosen not in options:
+        chosen = options[-1]
+    rest = (1 - p) / (len(options) - 1) if len(options) > 1 else 0.0
+    probs = {o: (p if o == chosen else rest) for o in options}
+    if len(options) == 1:
+        probs[chosen] = 1.0
+    return ChoiceDecision(
+        choice=chosen, probabilities=probs, confidence=choice_confidence(list(probs.values()))
+    )
 
 
 def _features() -> FeatureUnion:
@@ -131,6 +169,8 @@ class FallbackRouter:
             "needs_member_data": self._member_data,
             "answer_contains_medical_advice": self._answer_medical,
             "answer_supported_by_context": self._answer_supported,
+            "claim_category": self._claim_category,
+            "claim_amount": self._claim_amount,
         }
 
     def _proba(self, target: str, text: str) -> dict:
@@ -173,6 +213,29 @@ class FallbackRouter:
     def _member_data(self, state: RouterState, q: Question) -> NoulDecision:
         return NoulDecision(p=float(self._proba("member_data", state.member_message).get(1, 0.0)))
 
+    # --- claim arguments (keyword baseline) -----------------------------------
+
+    def _claim_category(self, state: RouterState, q: Question) -> ChoiceDecision:
+        text = state.member_message.lower()
+        hits = [opt for opt in q.options if any(k in text for k in CATEGORY_KEYWORDS.get(opt, ()))]
+        return _pick(q.options, hits[0] if len(hits) == 1 else "unclear")
+
+    def _claim_amount(self, state: RouterState, q: Question) -> ChoiceDecision:
+        """Prefer an amount near a cost word and away from words about past spending."""
+        texts = q.criteria
+        scored = []
+        for opt in q.options:
+            if opt == "none":
+                continue
+            context = str(texts[opt]).lower()
+            score = len(COST_WORDS.findall(context)) - 2 * len(SPENT_WORDS.findall(context))
+            scored.append((score, opt))
+        if not scored:
+            return _pick(q.options, "none")
+        best = max(scored)  # ties go to the later amount (usually the new expense)
+        ties = [o for s, o in scored if s == best[0]]
+        return _pick(q.options, ties[-1])
+
     # --- output check --------------------------------------------------------
 
     def _answer_medical(self, state: RouterState, q: Question) -> NoulDecision:
@@ -181,15 +244,21 @@ class FallbackRouter:
         )
 
     def _answer_supported(self, state: RouterState, q: Question) -> NoulDecision:
-        answer = state.assistant_answer or ""
-        context = (state.retrieved_plan_text or "").lower().replace(",", "")
-        numbers = {n.lower().replace(",", "").replace(" ", "") for n in NUMBER_RX.findall(answer)}
-        context_numbers = {n.replace(" ", "") for n in NUMBER_RX.findall(context)}
+        answer, context = state.assistant_answer or "", state.retrieved_plan_text or ""
         if not context:
             return NoulDecision(p=0.05)
-        if numbers - context_numbers:
+        # Compare values, not strings: "$80" in an answer matches "$80.00" in the context.
+        if unsupported_numbers(answer, context) or self._unsupported_durations(answer, context):
             return NoulDecision(p=0.1)  # a figure the plan text doesn't contain
         return NoulDecision(p=0.8)
+
+    @staticmethod
+    def _unsupported_durations(answer: str, context: str) -> set[str]:
+        def norm(text: str) -> set[str]:
+            found = DURATION_RX.findall(text)
+            return {re.sub(r"s$", "", d.lower().replace(" ", "")) for d in found}
+
+        return norm(answer) - norm(context)
 
     async def decide(self, state: RouterState, questions: list[Question]) -> Decisions:
         start = time.perf_counter()

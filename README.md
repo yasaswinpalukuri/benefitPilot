@@ -4,7 +4,7 @@ An AI assistant for health-insurance plan members. It answers coverage and benef
 
 > **Synthetic data only.** Every plan, member and claim in this repository is fictional. There is no real personal health information anywhere in the project.
 
-> **Status:** Phase 4 (System 1 routing: Jev and a fallback classifier behind one interface). See [CLAUDE.md](CLAUDE.md) for the build plan and [docs/DECISIONS.md](docs/DECISIONS.md) for architecture decisions.
+> **Status:** Phase 5 (LangGraph pipeline, LLM client, output check, audit log, `/ask`). See [CLAUDE.md](CLAUDE.md) for the build plan and [docs/DECISIONS.md](docs/DECISIONS.md) for architecture decisions.
 
 ## Why System 1 / System 2
 
@@ -46,6 +46,17 @@ With Docker:
 ```bash
 docker compose up --build         # API on http://localhost:8000/health
 ```
+
+## Ask a question
+
+```bash
+curl -X POST localhost:8000/ask -H "Content-Type: application/json" \
+  -d '{"member_id": "M021", "question": "I have used $420 of physio this year. Will a $120 session be covered?"}'
+```
+
+The response contains the answer, the route taken (`claim_check`, `coverage`, `procedure`, `emergency`, `refuse_medical`, `out_of_scope`, `escalate`), citations, the rules-engine result, the raw System 1 probabilities, any guardrails that fired, latency, cost and an `audit_id`. The full trace is at `GET /audit/{audit_id}`, and the human-review queue is at `GET /escalations`.
+
+The safety routes (emergency, medical-advice refusal, out of scope, escalation) return fixed, reviewed text with no LLM call. Claim answers use dollar amounts from the rules engine only, and a guard replaces any LLM phrasing that changes a number or reverses the decision.
 
 ## Check a claim (rules engine only, no LLM)
 

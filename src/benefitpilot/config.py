@@ -32,12 +32,14 @@ class Settings(BaseSettings):
     ollama_embed_model: str = "nomic-embed-text"
     llm_timeout_s: float = 300.0
     anthropic_api_key: SecretStr | None = None
+    anthropic_model: str = "claude-opus-5-5"
 
     # none: BM25-only retrieval, no network (tests/CI default).
     embeddings_backend: Literal["ollama", "none"] = "none"
 
     db_path: Path = REPO_ROOT / "data" / "benefitpilot.db"
     cache_dir: Path = REPO_ROOT / "data" / "cache"
+    audit_db_path: Path = REPO_ROOT / "data" / "audit" / "audit.db"
 
 
 @lru_cache

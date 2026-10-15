@@ -13,7 +13,7 @@ separate gate does that. With semantic vectors it uses the top cosine only,
 because BM25 can't separate in-scope from out-of-scope questions (a single
 generic word scores as high as a real match). Without vectors
 (EMBEDDINGS_BACKEND=none, or the embedder is down) it falls back to the
-top BM25 score. When `relevant` is False, callers
+top BM25 score against `min_bm25_gate` (ADR-021). When `relevant` is False, callers
 must answer "I couldn't find that in your plan" (CLAUDE.md, non-negotiable 3).
 The hits are still returned so the audit log and the "Why this answer?"
 panel can show the near-misses.
@@ -43,7 +43,8 @@ Mode = Literal["hybrid", "bm25", "vector"]
 class RetrievalConfig:
     rrf_k: int = 60
     candidates: int = 20  # per-retriever depth fed into fusion
-    min_bm25: float = 4.0  # a "meaningful" lexical match: may vote in fusion / pass the gate
+    min_bm25: float = 4.0  # a "meaningful" lexical match: may vote in fusion
+    min_bm25_gate: float = 2.0  # relevance gate when there are no vectors (offline)
     min_cosine: float = 0.57  # relevance gate when semantic vectors are available
 
 
@@ -171,7 +172,9 @@ class HybridRetriever:
 
         top_cos = float(cosines[mask].max()) if cosines is not None and mask.any() else None
         # Cosine gate when vectors exist; BM25 can't separate in-scope from out-of-scope.
-        relevant = top_cos >= cfg.min_cosine if top_cos is not None else top_bm25 >= cfg.min_bm25
+        relevant = (
+            top_cos >= cfg.min_cosine if top_cos is not None else top_bm25 >= cfg.min_bm25_gate
+        )
         return RetrievalResult(
             query=query,
             hits=hits,
