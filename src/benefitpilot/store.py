@@ -10,6 +10,7 @@ import datetime as dt
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
@@ -18,6 +19,20 @@ from benefitpilot.rules.models import CategoryUsage, MemberSnapshot
 
 class MemberNotFound(LookupError):
     pass
+
+
+@dataclass(frozen=True)
+class MemberInfo:
+    member_id: str
+    first_name: str
+    last_name: str
+    plan_id: str
+    relationship: str
+    primary_member_id: str | None
+
+    @property
+    def name(self) -> str:
+        return f"{self.first_name} {self.last_name}"
 
 
 class MemberStore:
@@ -34,6 +49,25 @@ class MemberStore:
             yield con
         finally:
             con.close()
+
+    def list_members(self) -> list[MemberInfo]:
+        with self._connect() as con:
+            rows = con.execute(
+                "SELECT member_id, first_name, last_name, plan_id, relationship, primary_member_id"
+                " FROM members ORDER BY member_id"
+            ).fetchall()
+        return [MemberInfo(**dict(r)) for r in rows]
+
+    def member_info(self, member_id: str) -> MemberInfo:
+        with self._connect() as con:
+            row = con.execute(
+                "SELECT member_id, first_name, last_name, plan_id, relationship, primary_member_id"
+                " FROM members WHERE member_id = ?",
+                (member_id,),
+            ).fetchone()
+        if row is None:
+            raise MemberNotFound(member_id)
+        return MemberInfo(**dict(row))
 
     def plan_id(self, member_id: str) -> str:
         with self._connect() as con:

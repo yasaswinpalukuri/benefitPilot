@@ -480,3 +480,67 @@ context → route ─┬→ canned (emergency / refuse / out_of_scope / escalate
 - A separate database keeps the "the claim check never writes" guarantee from ADR-011 intact.
 
 **Trade-offs.** SQLite serializes writes, which is fine for a demo and not for production traffic. There's no retention policy yet: a real deployment would need one, plus encryption at rest, since real audit logs would contain PHI.
+
+---
+
+## ADR-025: The UI is a pure API client, and the "Why this answer?" panel shows only what the API recorded
+
+**Status:** Accepted (Phase 6)
+
+**Decision.**
+- `ui/streamlit_app.py` talks to FastAPI over HTTP (`ui/api_client.py`) and never imports the pipeline.
+- For each answer it calls `POST /ask`, then `GET /audit/{id}`. The panel renders those two responses:
+  - the route and its reason;
+  - the System 1 probabilities against the policy's *own* thresholds (served by the new `GET /thresholds`);
+  - the claim arguments System 1 selected;
+  - the rules-engine table;
+  - the retrieved sections with their BM25 and vector ranks;
+  - the output check, the guardrails that fired, the LLM model and tokens, and per-stage latency and cost.
+- Two supporting endpoints were added: `GET /members` and `GET /members/{id}/usage`. The usage summary is computed in `rules/summary.py`, in code, from the same snapshot and plan rules as the engine.
+- Docker runs both services from one image: `api`, and `ui` with `BENEFITPILOT_API_URL=http://api:8000`. Streamlit is an optional `[ui]` extra.
+
+**Alternatives.** A Streamlit app that imports the pipeline directly, which is simpler with one process. Or React, which is the planned stretch goal.
+
+**Why.** The panel exists to make the audit trail visible. If it recomputed anything, it could disagree with the log. Being a pure client also means a React front end later is a rewrite of presentation only, with the same API. Thresholds come from the API so the dashed lines in the charts are the lines the policy used.
+
+**Trade-offs.** There are two HTTP calls per answer (`/ask`, then `/audit`). It's negligible next to a 15–30 s local LLM call. The members endpoints expose synthetic names; in a real system they'd need authentication and per-member authorization.
+
+---
+
+## ADR-026: One chart language for every System 1 signal; bugs found by looking at the real UI
+
+**Status:** Accepted (Phase 6)
+
+**Decision.**
+- **Bar charts.** Every Choice, Score and Noul is a horizontal bar chart on a fixed 0–100% axis, built in `ui/charts.py`. They use one hue (the palette's blue), 4 px rounded data-ends and value labels.
+- **Threshold markers.** Each chart draws a dashed neutral rule, or a tick, at the threshold the policy actually uses.
+- **Hover.** Tooltips give exact values.
+- **Usage meters.** Year-to-date usage uses Streamlit progress meters with the same blue.
+- **No red or green.** Status colours aren't used: a refusal isn't "bad data", and a nearly used benefit isn't an alarm.
+
+**Why.** A reader should see *why* a route was taken: the bar crosses the line, or it doesn't. Every chart is a single series, so no legend is needed and no categorical palette needs validating.
+
+**Bugs the tests didn't catch, found by running the real UI in a browser:**
+1. **Dollar signs rendered as LaTeX.** Streamlit treats text between two `$` signs as math, so "$420 … $120" in a button label became a formula, and every answer with two amounts would have been garbled. Fix: `md()` escapes `$` wherever text is rendered as Markdown. A test now fails if an unescaped `$` reaches the page.
+2. **Collapsed charts.** Streamlit sizes Altair charts to "fit", so a fixed pixel height had to hold the title and axes too, and all rows collapsed into one band. Fix: a step-based height (`alt.Step(28)` per row), which doesn't depend on an outer height.
+3. **Invisible labels in dark mode.** Vega's default mark text is black, so value labels vanished on the dark theme. Fix: labels use the palette's secondary text ink for the active mode (`st.context.theme.type`), falling back to a mid-grey that's readable on both.
+4. **Red meters, and lost dark mode.** Streamlit's default accent is red, which made "$420 of $500 used" look like an error. A bare `[theme] primaryColor` fixed the colour but silently forced light mode. Fix: `[theme.light]` and `[theme.dark]` sections in `.streamlit/config.toml`.
+
+**Trade-offs.** AppTest checks content and structure, not pixels, so visual regressions still need a look. Chart *layout* is verified by rendering specs offline with `vl-convert` and by a manual browser check, not in CI.
+
+---
+
+## ADR-027: Test the UI against recorded *real* API responses
+
+**Status:** Accepted (Phase 6)
+
+**Decision.** `tests/test_ui.py` drives the actual Streamlit script with `streamlit.testing.v1.AppTest`. The API client is replaced by a fake that replays JSON captured, in the same test session, from the real FastAPI app: real routing policy, rules engine and audit log, with a scripted router and LLM. The tests:
+- click the example questions and select a member;
+- check the answer, route label, rules table, retrieved sections and the number of charts;
+- check that the emergency path shows no LLM trace.
+
+The API client itself is tested with `httpx.MockTransport`.
+
+**Why.** Hand-written fake responses drift from the API. Recording them from the real app means a change to `/ask` or `/audit` that breaks the UI fails a test.
+
+**Trade-offs.** AppTest can't see layout or colour; see ADR-026.

@@ -1,0 +1,13 @@
+# Accent = the charts' series blue. Streamlit's default accent is red, which made
+# ordinary usage meters ("$420 of $500 used") read as alarms; red is reserved
+# for status, not for data.
+# Set per mode: a bare [theme] primaryColor creates a custom light-only theme
+# and silently drops dark mode.
+[theme.light]
+primaryColor = "#2a78d6"
+
+[theme.dark]
+primaryColor = "#3987e5"
+
+[browser]
+gatherUsageStats = false

@@ -6,9 +6,24 @@ services:
     env_file:
       - path: .env
         required: false
+    volumes:
+      - audit:/app/data/audit  # keep the audit log across restarts
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
-  # ui (Streamlit) is added in Phase 6.
+
+  ui:
+    build: .
+    command: ["streamlit", "run", "ui/streamlit_app.py", "--server.port", "8501", "--server.address", "0.0.0.0", "--server.headless", "true"]
+    ports:
+      - "8501:8501"
+    environment:
+      BENEFITPILOT_API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  audit:

@@ -26,11 +26,24 @@ class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
 
 
+class RetrievedChunk(BaseModel):
+    citation: str
+    title: str
+    markdown: str
+    score: float
+    bm25_rank: int | None
+    bm25_score: float | None
+    vector_rank: int | None
+    cosine: float | None
+
+
 class AskResponse(BaseModel):
     answer: str
     route: str
+    route_reason: str
     citations: list[str]
     rule_result: dict[str, Any] | None
+    retrieved: list[RetrievedChunk]  # chunks the answer was grounded in, with scores
     decisions: dict[str, Any]  # raw System 1 probabilities: routing + output check
     guardrails: list[str]
     latency_ms: float
@@ -72,11 +85,27 @@ async def ask(req: AskRequest, pipeline: Annotated[Pipeline, Depends(get_pipelin
     decisions = {"routing": record.router["decisions"]}
     if record.output_check:
         decisions["output_check"] = record.output_check["decisions"]
+    retrieval = state.get("retrieval")
+    retrieved = [
+        RetrievedChunk(
+            citation=h.citation,
+            title=h.chunk.title,
+            markdown=h.chunk.markdown,
+            score=h.score,
+            bm25_rank=h.bm25_rank,
+            bm25_score=h.bm25_score,
+            vector_rank=h.vector_rank,
+            cosine=h.cosine,
+        )
+        for h in (retrieval.hits if retrieval else [])
+    ]
     return AskResponse(
         answer=record.answer,
         route=record.route,
+        route_reason=record.route_reason,
         citations=record.citations,
         rule_result=record.rule_result,
+        retrieved=retrieved,
         decisions=decisions,
         guardrails=record.guardrails,
         latency_ms=record.latency_ms["total"],

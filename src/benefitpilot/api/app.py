@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from fastapi import FastAPI
 
 from benefitpilot import __version__
-from benefitpilot.api import ask, claims
+from benefitpilot.api import ask, claims, members
 from benefitpilot.config import get_settings
+from benefitpilot.routing.policy import Thresholds
 
 app = FastAPI(
     title="BenefitPilot",
@@ -15,6 +18,13 @@ app = FastAPI(
 )
 app.include_router(claims.router)
 app.include_router(ask.router)
+app.include_router(members.router)
+
+
+@app.get("/thresholds")
+def thresholds() -> dict[str, float]:
+    """The routing policy's thresholds, so clients draw the same lines the policy uses."""
+    return asdict(Thresholds.load())
 
 
 @app.get("/health")
