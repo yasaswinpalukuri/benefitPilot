@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - run: pip install -e ".[dev,ui]"
+      - run: pip install -e ".[dev,ui,eval]"
       - name: Lint
         run: |
           ruff check .
@@ -32,7 +32,8 @@ jobs:
         run: python scripts/generate_data.py
       - name: Tests
         run: pytest
-      # Phase 7 adds: guardrail red-team gate (fails below 98% recall) and a small eval.
+      - name: Evaluation gates (guardrail recall, false refusals, violation detection)
+        run: python eval/run_eval.py ci
 
   docker:
     runs-on: ubuntu-latest

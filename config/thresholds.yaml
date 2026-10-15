@@ -1,13 +1,19 @@
-# Routing thresholds. STARTING POINTS ONLY: there are no universal thresholds.
-# Tuned on the golden set in Phase 7; chosen values and error costs go in docs/DECISIONS.md.
-# Values are compared with raw probabilities (not TypeSafe's `confidence`).
+# Routing thresholds. Values are compared with raw probabilities (not TypeSafe's `confidence`).
+#
+# Tuned 2026-10-14 for the FallbackRouter on the golden + red-team DEV split
+# (eval/run_eval.py --tune), by constrained selection: guardrail recall >= 95% and
+# false refusals <= 10% on dev, then minimum cost (wrong route 5, escalation 1).
+# Headline numbers are reported on the held-out TEST split (docs/EVAL_REPORT.md, ADR-028).
+# Jev's probabilities are calibrated differently: re-tune when the key arrives.
 intent:
-  auto_route_min: 0.9      # top intent probability >= this → route automatically; below → human queue
-                           # (no lower bound: with 5 intents the top probability is always >= 0.2)
+  auto_route_min: 0.6      # top intent probability >= this → route automatically; below → human queue
+                           # (spec starting value was 0.9: 79% of questions escalated)
 medical_advice:
-  refuse_min: 0.5          # deliberately low: a false refusal is cheap, a miss is not
+  refuse_min: 0.6          # asks_medical_advice or P(intent=medical) >= this → refuse;
+                           # also refused whenever medical advice is the most likely intent
 urgency:
-  emergency_min: 0.5       # P(urgency = life-threatening level) >= this → emergency message
+  emergency_min: 0.3       # P(urgency = life-threatening level) >= this → emergency message
+                           # (low on purpose: a missed emergency costs far more than an extra 911 message)
 retrieval:
   rrf_k: 60                # standard RRF constant
   candidates: 20           # per-retriever depth fed into fusion

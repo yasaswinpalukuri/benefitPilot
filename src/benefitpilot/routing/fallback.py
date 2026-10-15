@@ -40,27 +40,53 @@ from benefitpilot.routing.types import (
     ScoreDecision,
 )
 
+# Lexicons are general clinical vocabulary and standard triage red flags, written
+# from domain knowledge, not from eval phrasings (ADR-028). Broadened in Phase 7
+# after the dev-split red-team run showed 56% recall with the Phase 4 lists.
 SYMPTOM = (
-    r"pain|hurts?|ache|aching|sore|fever|cough|rash|dizz\w*|nause\w*|vomit\w*|bleed\w*|"
-    r"infection|swell\w*|swollen|migraine|headache|blood pressure|sprain\w*|fracture|"
-    r"throbbing|numb|allerg\w*|insomnia|can'?t sleep|lump|sciatica"
+    r"pain|hurts?|ache|aching|sore|fever|cough\w*|rash|dizz\w*|nause\w*|vomit\w*|bleed\w*|"
+    r"infection|swell\w*|swollen|migraine|headache|sprain\w*|fracture|broken|throbbing|"
+    r"numb|allerg\w*|insomnia|can'?t sleep|lump|sciatica|diarrh\w*|constipat\w*|"
+    r"tired|fatigue|itch\w*|burn\w*|cramp\w*|stiff|weak\w*|faint\w*|mole|spots?|"
+    r"symptoms?|side effects?"
+)
+CONDITION = (
+    r"diabet\w*|blood (sugar|pressure)|cholesterol|depress\w*|anxiety|panic|ptsd|adhd|"
+    r"asthma|eczema|arthritis|cancer|tumou?r|thyroid|pregnan\w*|uti|flu|covid|cold|"
+    r"strep|ear infection|herniat\w*|disc|acl|concussion|insulin|stitches|wound|"
+    r"vaccin\w*|immuni[sz]\w*|vitamin \w+|supplements?|diet|weight loss"
 )
 TREATMENT = (
-    r"medication|medicine|meds|pills?|drugs?|dose|dosage|mg\b|ibuprofen|advil|tylenol|"
-    r"acetaminophen|aspirin|antibiotics?|antidepressants?|melatonin|painkillers?|"
-    r"stretch\w*|exercises?|treatment|surgery|ice|heat"
+    r"medications?|medicines?|meds|pills?|tablets?|drugs?|doses?|dosage|dosing|mg\b|"
+    r"prescriptions?|over[- ]the[- ]counter|otc|ibuprofen|advil|motrin|tylenol|"
+    r"acetaminophen|aspirin|naproxen|antibiotics?|antidepressants?|ssris?|zoloft|prozac|"
+    r"xanax|oxycodone|opioids?|melatonin|painkillers?|sleeping pills?|blood thinners?|"
+    r"chemo\w*|epipen|inhaler|stretch\w*|exercises?|treatments?|therapy|surgery|"
+    r"\bice\b|\bheat\b|rest\b"
 )
 ADVICE = (
-    r"should i|what (should|can|do) i|which .* (best|better)|(best|better) .* for|"
-    r"is it safe|how (much|many|often) .* take|what could it be|is (this|that|it) "
-    r"(serious|bad|normal)|do i need|can i stop|tell me what to|recommend|what to take|"
-    r"how do i (make|stop|treat|cure)|pretend you'?re (my|a) doctor|what dose"
+    r"should i|what (should|can|do) i|which .*(best|better|work)|(best|better|fastest) .*for|"
+    r"is it (safe|okay|ok|bad|normal|serious)|is (this|that) (serious|bad|normal)|"
+    # "how much/many/often" only with an advice verb: "How much does the plan pay for
+    # massage therapy?" is a plan question, "how much ibuprofen can I take" is not.
+    r"how (much|many|often|long)\b.*\b(take|use|drink|eat|need|wait|give|safe)|"
+    r"should (my|i|we)\b|what .*\b(stops?|cures?|treats?|relieves?)\b|"
+    r"what could it be|what does it mean|do i have\b|"
+    r"should i (worry|be worried)|am i\b|do i need|can i (stop|skip|double|mix|give|use|"
+    r"take|drink)|tell me what to|recommend|what to take|right amount|safe (amount|dose)|"
+    r"how do i (make|stop|treat|cure|set|fix)|pretend you'?re (my|a) doctor|what dose|"
+    r"diagnos\w*|guide to (treating|setting)|treat (my|their|his|her)|what happens now|"
+    r"what('s| is) (the |a )?(max|maximum|lethal)|helps? with|would help|good for"
 )
 EMERGENCY = (
-    r"chest pain|crushing|can'?t breathe|trouble breathing|turning blue|overdos\w*|"
-    r"whole bottle|suicid\w*|kill(ing)? myself|end my life|self[- ]harm|collapsed|"
-    r"not responding|unconscious|won'?t stop bleeding|severe bleeding|throat is swelling|"
-    r"face is drooping|stroke|heart attack|seizure"
+    r"chest (pain|pressure|tightness|feels tight)|crushing|can'?t breathe|"
+    r"trouble breathing|short(ness)? of breath|turning blue|overdos\w*|whole bottle|"
+    r"too many (pills|tablets|sleeping pills)|swallowed (a |an |some )?(battery|button "
+    r"battery|bleach|poison|magnet|pills)|poison\w*|suicid\w*|kill(ing)? myself|"
+    r"end (my life|it all)|(hurt|harm)(ing)? myself|self[- ]harm|don'?t want to (live|be "
+    r"alive)|collapsed|not responding|unconscious|passed out|won'?t stop bleeding|"
+    r"severe bleeding|(throat|tongue|lips?|face) (is |are )?swell\w*|face is drooping|"
+    r"slurred speech|stroke|heart attack|seizure|stiff neck"
 )
 ANSWER_ADVICE = (
     r"\b(you should|i recommend|i'd recommend|try taking|take \d|take (some|an?)\b)|"
@@ -74,12 +100,14 @@ def _rx(pattern: str) -> re.Pattern[str]:
 
 
 SYMPTOM_RX, TREATMENT_RX, ADVICE_RX = _rx(SYMPTOM), _rx(TREATMENT), _rx(ADVICE)
+CONDITION_RX = _rx(CONDITION)
 EMERGENCY_RX, ANSWER_ADVICE_RX, DURATION_RX = _rx(EMERGENCY), _rx(ANSWER_ADVICE), _rx(DURATION)
 
 
 def medical_rule(text: str) -> float:
     """High-recall rule: advice-seeking phrasing about a symptom or treatment."""
-    if ADVICE_RX.search(text) and (SYMPTOM_RX.search(text) or TREATMENT_RX.search(text)):
+    clinical = SYMPTOM_RX.search(text) or CONDITION_RX.search(text) or TREATMENT_RX.search(text)
+    if ADVICE_RX.search(text) and clinical:
         return 0.9
     return 0.0
 

@@ -7,7 +7,12 @@ the cost of getting it wrong:
 1. Emergency  — P(life-threatening urgency) >= emergency_min. Checked first:
    someone describing chest pain needs "call 911", not a refusal.
 2. Refuse     — asks_medical_advice >= refuse_min, or the intent model's
-   P(medical_advice_request) >= refuse_min. Two signals, either one refuses.
+   P(medical_advice_request) >= refuse_min, or medical advice is the intent's
+   most likely option even below that threshold. Three signals, any one
+   refuses. The argmax rule uses the *comparison* between options, which an
+   under-confident classifier still gets right (ADR-028): on the held-out red
+   team it reached 100% recall at 9.7% false refusals, where lowering the
+   threshold alone needed 22.6% false refusals for the same recall.
 3. Auto-route — top intent probability >= auto_route_min.
 4. Escalate   — anything less certain goes to the human-review queue.
 """
@@ -90,11 +95,13 @@ def route(decisions: Decisions, t: Thresholds) -> RouteDecision:
 
     if p_emergency >= t.emergency_min:
         return decide("emergency", f"P(emergency)={p_emergency:.2f} >= {t.emergency_min}")
-    if p_medical >= t.refuse_min or p_intent_medical >= t.refuse_min:
+    medical_is_top = intent.choice == "medical_advice_request"
+    if p_medical >= t.refuse_min or p_intent_medical >= t.refuse_min or medical_is_top:
         return decide(
             "refuse_medical",
-            f"asks_medical_advice={p_medical:.2f}, P(intent=medical)={p_intent_medical:.2f}; "
-            f"refuse at >= {t.refuse_min}",
+            f"asks_medical_advice={p_medical:.2f}, P(intent=medical)={p_intent_medical:.2f}"
+            f"{' (most likely intent)' if medical_is_top else ''}; refuse at >= {t.refuse_min}"
+            " or when medical advice is the most likely intent",
         )
     if intent.top_p >= t.auto_route_min:
         return decide(

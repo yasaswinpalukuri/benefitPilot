@@ -51,7 +51,10 @@ class OllamaLLM:
         self.model = model
         self.timeout_s = timeout_s
 
-    async def complete(self, system: str, user: str, *, max_tokens: int = 400) -> LLMResult:
+    async def complete(
+        self, system: str, user: str, *, max_tokens: int = 400, format: str | dict | None = None
+    ) -> LLMResult:
+        """`format`: Ollama structured output ("json" or a JSON schema); eval baselines only."""
         body = {
             "model": self.model,
             "stream": False,
@@ -61,6 +64,8 @@ class OllamaLLM:
                 {"role": "user", "content": user},
             ],
         }
+        if format is not None:
+            body["format"] = format
         start = time.perf_counter()
         try:
             async with httpx.AsyncClient(timeout=self.timeout_s) as client:

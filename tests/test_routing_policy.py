@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import pytest
+import yaml
 
+from benefitpilot.config import CONFIG_DIR
 from benefitpilot.routing.confidence import choice_confidence, score_confidence
 from benefitpilot.routing.policy import Thresholds, check_output, route
 from benefitpilot.routing.questions import INTENTS
@@ -109,7 +111,25 @@ def test_emergency_threshold_uses_top_level_probability_not_score():
 
 
 def test_thresholds_load_from_yaml():
-    assert Thresholds.load() == Thresholds()
+    raw = yaml.safe_load((CONFIG_DIR / "thresholds.yaml").read_text(encoding="utf-8"))
+    t = Thresholds.load()
+    assert t.auto_route_min == raw["intent"]["auto_route_min"]
+    assert t.refuse_min == raw["medical_advice"]["refuse_min"]
+    assert t.emergency_min == raw["urgency"]["emergency_min"]
+
+
+def test_medical_as_most_likely_intent_refuses_below_threshold():
+    """The argmax rule (ADR-028): an under-confident classifier still ranks options right."""
+    d = decisions(
+        "medical_advice_request",
+        0.35,
+        medical=0.3,
+        rest={"coverage_question": 0.3, "claim_check": 0.15, "out_of_scope": 0.1},
+    )
+    assert d.choice("intent").choice == "medical_advice_request"
+    r = route(d, T)
+    assert r.route == "refuse_medical"
+    assert "most likely intent" in r.reason
 
 
 # --- output check -------------------------------------------------------------
