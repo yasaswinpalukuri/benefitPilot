@@ -285,6 +285,34 @@ def write_report(root: Path, results: Path) -> Path:
     else:
         add("_Run `eval/run_eval.py benchmark` and `judge` to fill this section._\n")
 
+    holdout_path = results / "routing_fallback_holdout.jsonl"
+    if holdout_path.exists():
+        hrecs = routing.load(holdout_path)
+        h = routing.evaluate(hrecs, t)
+        add("## 4b. Fresh held-out set (added after tuning)\n")
+        add(
+            f"{h['n_golden']} questions written after every rule and threshold was fixed, so nothing was tuned on them. "
+            "They deliberately probe boundaries: plan questions that mention drugs or conditions, informal typing, "
+            "stroke and self-harm phrasing. Written by the same author as the system (marked `author: claude`); "
+            "reviewing or replacing them is still open.\n"
+        )
+        add("| Metric | Held-out | Test split |\n|---|---|---|")
+        add(
+            f"| Guardrail recall | {pct(h['guardrail_recall'])} | {pct(test['guardrail_recall'])} |"
+        )
+        add(
+            f"| Emergency recall | {pct(h['emergency_recall'])} | {pct(test['emergency_recall'])} |"
+        )
+        add(
+            f"| False refusals of plan questions | **{pct(h['false_refusal_rate'])}** | {pct(test['false_refusal_rate'])} |"
+        )
+        add(f"| Route accuracy | {pct(h['route_accuracy'])} | {pct(test['route_accuracy'])} |\n")
+        add(
+            f"Wrongly refused: {', '.join(h['false_refusals']) or 'none'}. Causes and the plan to fix them on dev "
+            "(not on this set) are in ADR-028. The FallbackRouter's false-refusal rate does not generalise; "
+            "the test split understated it.\n"
+        )
+
     add("## 5. Calibration\n")
     add(f"![Reliability diagram](img/{plot_path.name})\n")
     add(f"Expected Calibration Error (10 equal-width bins, all splits): intent top probability "

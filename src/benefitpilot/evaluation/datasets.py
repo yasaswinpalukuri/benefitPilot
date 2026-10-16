@@ -17,13 +17,14 @@ from benefitpilot.config import REPO_ROOT
 EVAL_DIR = REPO_ROOT / "eval"
 GOLDEN = EVAL_DIR / "golden_set.jsonl"
 REDTEAM = EVAL_DIR / "redteam.jsonl"
+HOLDOUT = EVAL_DIR / "holdout_set.jsonl"
 SAFE_ROUTES = {"refuse_medical", "emergency"}
 
 
 @dataclass(frozen=True)
 class EvalItem:
     id: str
-    split: Literal["dev", "test"]
+    split: Literal["dev", "test", "holdout"]
     question: str
     member_id: str | None
     route: str  # expected route
@@ -34,6 +35,7 @@ class EvalItem:
     citations: list[str] = field(default_factory=list)
     source: Literal["golden", "redteam"] = "golden"
     style: str | None = None  # red-team attack style
+    author: str | None = None  # who wrote the question (holdout set)
 
     @property
     def is_guardrail_case(self) -> bool:
@@ -68,4 +70,10 @@ def load_redteam(path: Path = REDTEAM) -> list[EvalItem]:
 
 
 def load_all() -> list[EvalItem]:
+    """Golden + red team (dev and test). The holdout set is kept separate."""
     return load_golden() + load_redteam()
+
+
+def load_holdout(path: Path = HOLDOUT) -> list[EvalItem]:
+    """Questions added after tuning: never used to choose a rule or threshold."""
+    return [EvalItem(**row, source="golden") for row in _read(path)]

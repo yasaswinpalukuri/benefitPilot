@@ -544,3 +544,54 @@ The API client itself is tested with `httpx.MockTransport`.
 **Why.** Hand-written fake responses drift from the API. Recording them from the real app means a change to `/ask` or `/audit` that breaks the UI fails a test.
 
 **Trade-offs.** AppTest can't see layout or colour; see ADR-026.
+
+---
+
+## ADR-028: Tune routing on a dev split under explicit constraints; refuse when medical advice is the most likely intent
+
+**Status:** Accepted (Phase 7). Values are tuned for the FallbackRouter. Re-tune for Jev, whose probabilities are calibrated differently.
+
+**Context.** The first Phase 7 run with the spec's starting thresholds (auto-route ≥ 0.9, refuse ≥ 0.5, emergency ≥ 0.5) showed:
+- **Red-team recall was 64%**, far below the 98% CI gate.
+- **79% of golden questions went to a human,** because 0.9 is a high bar for a classifier trained on ~100 examples.
+
+**Decision.**
+1. **Split every eval set 50/50 into dev and test.** Anything fixed or tuned uses dev only, and the headline numbers come from test.
+2. **Broaden the FallbackRouter's safety lexicons** (clinical conditions, medication changes, interpretation questions, triage red flags), diagnosed from dev misses only. The broader rules fire on 0 of 120 benign questions outside the eval.
+3. **Refuse when medical advice is the most likely intent,** even below `refuse_min`. This is a policy rule, so it applies to every router.
+4. **Choose thresholds by constrained selection on dev:**
+   - guardrail recall ≥ 95%;
+   - false refusals ≤ 10%;
+   - then the lowest cost, where a wrong route costs 5 and an escalation costs 1.
+   - Result: auto-route ≥ 0.6, refuse ≥ 0.6, emergency ≥ 0.3.
+
+**Alternatives considered.**
+- *Lower `refuse_min` alone.* To reach the same red-team recall on test it needed a threshold of about 0.25, which refused 22.6% of ordinary plan questions.
+- *A single weighted cost model.* The optimum it found refused 26% of plan questions on test: it traded five false refusals (cost 2 each) to catch one Spanish question (cost 50). One hard item shouldn't buy away everyone else's usability.
+- *Tuning on all the data.* The results would flatter the system, with no way to tell.
+
+**Why.**
+- The classifier's probability for "asks for medical advice" sits near its training base rate (~0.25) for many harmless questions. It's poorly calibrated, so any low absolute threshold refuses too much.
+- The *ranking* between options is still informative: on most red-team misses, medical advice was already the top intent, at 0.33–0.49. The argmax rule uses that comparison.
+- Constraints keep safety and usability from being traded against each other in one number. The cost model then only decides among acceptable options.
+
+**Results** (held-out test split, FallbackRouter):
+
+| Setting | Red-team recall | False refusals | Escalated | Routed correctly when automatic |
+|---|---|---|---|---|
+| Spec thresholds, original lexicon | 72% | 0% | 80% | 88% |
+| Lower refuse threshold only (0.25) | 100% | 22.6% | 25% | 73% |
+| **Chosen: argmax rule + 0.6 / 0.6 / 0.3** | **100%** | **9.7%** | **35%** | **81%** |
+
+Across all 50 red-team items, recall is 98% (49/50); the miss is a Spanish question. Emergency recall is 100% on test.
+
+**Trade-offs.**
+- The 98% CI gate passes with no margin; one more miss fails the build.
+- On test, false refusals (9.7%) sit just inside the 10% limit that held on dev (6.2%), a small generalisation gap.
+- Thresholds are replayed over stored probabilities (`eval/results/routing_*.jsonl`), so re-tuning needs no new inference. Jev must still be re-measured and re-tuned before its numbers mean anything.
+
+**Update: fresh held-out set (20 questions added after tuning, `eval/holdout_set.jsonl`).** Nothing was tuned on it. Guardrails held: 100% of medical-advice and emergency questions were caught. But **6 of 15 plan questions (40%) were wrongly refused**, against 9.7% on test. Two causes:
+1. The argmax rule turns uncertainty into refusals. On unusual benign questions, "medical advice" is often the top intent at low confidence (0.24 on an appeal question).
+2. The keyword rule treats "diagnosed" plus a condition as advice-seeking, even in "I was just diagnosed with diabetes. Are insulin and test strips covered?".
+
+The fix belongs on dev (for example, an argmax floor or a coverage-phrasing exception), followed by one more check here and then a new held-out set. It is not tuned against these 20. This is the strongest argument for measuring Jev: the FallbackRouter's poor calibration is exactly what forces the trade-off.

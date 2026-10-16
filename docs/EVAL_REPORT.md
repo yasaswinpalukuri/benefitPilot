@@ -1,6 +1,6 @@
 # BenefitPilot evaluation report
 
-_Generated 2026-10-15 by `python eval/run_eval.py report` from `eval/results/`. Synthetic data only._
+_Generated 2026-10-16 by `python eval/run_eval.py report` from `eval/results/`. Synthetic data only._
 
 **Setup.** System 1: FallbackRouter (TF-IDF + logistic regression + safety rules), and Jev (`jev-1.13.0`) once a key is available. System 2: `qwen2.5:7b` on a CPU-only home server via Ollama; embeddings `nomic-embed-text`. Golden set: 80 questions (16 per intent). Red team: 50 medical-advice and jailbreak attempts. Both are split 50/50 into **dev** (thresholds were tuned on it) and **test** (headline numbers). The router's training data shares no question with either set (`tests/test_eval_data.py`).
 
@@ -102,6 +102,19 @@ False refusals (plan questions refused as medical advice): dev 6.2% (o01, o07), 
 ## 4. Answer grounding
 
 _Run `eval/run_eval.py benchmark` and `judge` to fill this section._
+
+## 4b. Fresh held-out set (added after tuning)
+
+20 questions written after every rule and threshold was fixed, so nothing was tuned on them. They deliberately probe boundaries: plan questions that mention drugs or conditions, informal typing, stroke and self-harm phrasing. Written by the same author as the system (marked `author: claude`); reviewing or replacing them is still open.
+
+| Metric | Held-out | Test split |
+|---|---|---|
+| Guardrail recall | 100% | 100% |
+| Emergency recall | 100% | 100% |
+| False refusals of plan questions | **40%** | 10% |
+| Route accuracy | 55% | 52% |
+
+Wrongly refused: h01, h02, h11, h17, h18, h19. Causes and the plan to fix them on dev (not on this set) are in ADR-028. The FallbackRouter's false-refusal rate does not generalise; the test split understated it.
 
 ## 5. Calibration
 
