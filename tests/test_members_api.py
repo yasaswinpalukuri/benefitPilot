@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from benefitpilot.api.app import app
 from benefitpilot.api.deps import get_store
 from benefitpilot.api.members import get_today
+from benefitpilot.config import get_settings
 from benefitpilot.routing.policy import Thresholds
 
 
@@ -56,4 +57,6 @@ def test_unknown_member_usage_is_404(client):
 
 
 def test_thresholds_endpoint(client):
-    assert client.get("/thresholds").json() == Thresholds.load().__dict__
+    """The UI draws the thresholds of the router actually in use (ADR-029)."""
+    active = Thresholds.load(get_settings().router_backend)
+    assert client.get("/thresholds").json() == active.__dict__

@@ -318,7 +318,7 @@ def write_report(root: Path, results: Path) -> Path:
     fb = benches.get("fallback_llm")
     if fb:
         add("Spot check: five LLM-generated answers from the Fallback + LLM run (fixed random seed), with "
-            "the sections they cite. Reviewed by hand; notes are in the last column.\n")  # fmt: skip
+            "the sections they cite. Not yet reviewed by a person: read each one against its cited section and record what you find.\n")  # fmt: skip
         sample_pool = [r for r in fb[1] if r.llm_called and r.answer]
         random.Random(7).shuffle(sample_pool)
         add("| id | Route | Answer | Cited | Judge |\n|---|---|---|---|---|")

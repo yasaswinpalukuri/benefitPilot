@@ -55,6 +55,7 @@ class BenchRecord:
     expected_citations: list[str] = field(default_factory=list)
     context: str = ""  # what the answer should be grounded in (for the judge)
     error: str | None = None
+    router: str = ""  # which System 1 answered (exposes silent failovers)
     judge_supported: bool | None = None
     judge_reason: str | None = None
 
@@ -102,6 +103,7 @@ async def run_pipeline(pipeline: Pipeline, items: list[EvalItem], name: str) -> 
             citations=rec.citations,
             expected_citations=item.citations,
             context=context,
+            router=rec.router.get("name", ""),
         )
         out.append(r)
         _log(i, len(items), r)
