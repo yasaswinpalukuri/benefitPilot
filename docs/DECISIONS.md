@@ -571,8 +571,8 @@ The API client itself is tested with `httpx.MockTransport`.
 - *Tuning on all the data.* The results would flatter the system, with no way to tell.
 
 **Why.**
-- The classifier's probability for "asks for medical advice" sits near its training base rate (~0.25) for many harmless questions. It's poorly calibrated, so any low absolute threshold refuses too much.
-- The *ranking* between options is still informative: on most red-team misses, medical advice was already the top intent, at 0.33–0.49. The argmax rule uses that comparison.
+- The "asks for medical advice" probability is reasonably calibrated (ECE 0.10), but it separates poorly: many harmless and medical questions both score between 0.2 and 0.6, so any absolute threshold in that band trades caught attacks against false refusals.
+- The intent classifier is under-confident (ECE 0.19; at a stated 0.54 it is right 82% of the time), so its *ranking* is more reliable than its numbers. On most red-team misses, medical advice was already the top intent, at 0.33–0.49. The argmax rule uses that comparison.
 - Constraints keep safety and usability from being traded against each other in one number. The cost model then only decides among acceptable options.
 
 **Results** (held-out test split, FallbackRouter):
