@@ -65,7 +65,7 @@ def get_pipeline() -> Pipeline:
             llm=build_llm(settings),
             store=store,
             plans=get_plans(),
-            thresholds=Thresholds.load(),
+            thresholds=Thresholds.load(settings.router_backend),
             audit=AuditStore(settings.audit_db_path),
         )
     )

@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     db_path: Path = REPO_ROOT / "data" / "benefitpilot.db"
     cache_dir: Path = REPO_ROOT / "data" / "cache"
     audit_db_path: Path = REPO_ROOT / "data" / "audit" / "audit.db"
+
+    @field_validator("typesafe_api_key", "anthropic_api_key", mode="before")
+    @classmethod
+    def _blank_key_is_missing(cls, value: object) -> object:
+        """`.env.example` ships `TYPESAFE_API_KEY=`; an empty or whitespace key means
+        "not set", so code that checks `is None` skips Jev instead of sending ""."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 @lru_cache

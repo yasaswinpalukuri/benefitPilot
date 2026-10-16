@@ -14,6 +14,12 @@ medical_advice:
 urgency:
   emergency_min: 0.3       # P(urgency = life-threatening level) >= this → emergency message
                            # (low on purpose: a missed emergency costs far more than an extra 911 message)
+# Per-router overrides (ADR-029). Each System 1 model is tuned on its own probabilities.
+routers:
+  jev:                     # jev-1.13.0, tuned 2026-10-16 on the same DEV split and constraints
+    auto_route_min: 0.6
+    refuse_min: 0.2        # dev could not separate 0.2-0.6; ties go to the safer (lower) value
+    emergency_min: 0.3
 retrieval:
   rrf_k: 60                # standard RRF constant
   candidates: 20           # per-retriever depth fed into fusion

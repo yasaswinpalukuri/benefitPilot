@@ -189,6 +189,50 @@ def write_report(root: Path, results: Path) -> Path:
         f"| Violation detection (100 synthetic claims) | precision {pct(viol['precision'])}, recall {pct(viol['recall'])} |\n"
     )
 
+    jev_path = results / "routing_jev.jsonl"
+    if jev_path.exists():
+        jrecs = routing.load(jev_path)
+        tj = Thresholds.load("jev")
+        jplot = root / "docs" / "img" / "calibration_jev.png"
+        plot_calibration(
+            jrecs, jplot, "Jev (jev-1.13.0) calibration (golden + red team, all splits)"
+        )
+        rows = [("FallbackRouter", recs, t, results / "routing_fallback_holdout.jsonl"),
+                ("**Jev** (`jev-1.13.0`)", jrecs, tj, results / "routing_jev_holdout.jsonl")]  # fmt: skip
+        add("## System 1 head-to-head: FallbackRouter vs Jev (routing only)\n")
+        add("Same 150 questions, each router with thresholds tuned on its own dev split (ADR-028, ADR-029). "
+            "Routing only: no LLM involved, so these numbers isolate System 1.\n")  # fmt: skip
+        add(
+            "| Router | Split | Intent accuracy | Red-team caught | Plan questions wrongly refused | Sent to a human | Routed correctly |"
+        )
+        add("|---|---|---|---|---|---|---|")
+        for name, rr, th, hpath in rows:
+            for split in ("test",):
+                m = routing.evaluate(rr, th, split)
+                add(f"| {name} | test | {pct(m['intent_accuracy'], 1)} | {pct(m['redteam_recall'], 1)} | "
+                    f"{pct(m['false_refusal_rate'], 1)} | {pct(m['escalation_rate'], 1)} | {pct(m['route_accuracy'], 1)} |")  # fmt: skip
+            if hpath.exists():
+                m = routing.evaluate(routing.load(hpath), th)
+                add(f"| {name} | fresh held-out | {pct(m['intent_accuracy'], 1)} | n/a | "
+                    f"{pct(m['false_refusal_rate'], 1)} | {pct(m['escalation_rate'], 1)} | {pct(m['route_accuracy'], 1)} |")  # fmt: skip
+        jall = routing.evaluate(jrecs, tj)
+        lat = [r.decisions.latency_ms for r in jrecs]
+        tokens = sum(r.decisions.input_tokens or 0 for r in jrecs)
+        cost = sum(r.decisions.cost_usd for r in jrecs)
+        j_int, j_med = _calibration_inputs(jrecs)
+        f_int, f_med = _calibration_inputs(recs)
+        add("")
+        add(f"- **All 50 red-team attacks**: FallbackRouter {pct(allm['redteam_recall'])} "
+            f"(misses: {', '.join(allm['guardrail_misses']) or 'none'}), Jev {pct(jall['redteam_recall'])} "
+            f"(misses: {', '.join(jall['guardrail_misses']) or 'none'}).")  # fmt: skip
+        add(f"- **Jev latency per decision**: p50 {percentile(lat, 50):.0f} ms, p95 {percentile(lat, 95):.0f} ms "
+            f"(network round trip from Toronto, all routing questions in one request). "
+            f"**Cost**: ${cost:.4f} for {len(jrecs)} decisions ({tokens:,} input tokens), "
+            f"${cost / len(jrecs) * 1000:.2f} per 1,000 questions.")  # fmt: skip
+        add(f"- **Calibration (ECE)**: intent top probability: FallbackRouter {f_int.ece:.3f}, Jev {j_int.ece:.3f}; "
+            f"asks medical advice: FallbackRouter {f_med.ece:.3f}, Jev {j_med.ece:.3f}. "
+            f"Reliability diagrams: [FallbackRouter](img/calibration_fallback.png), [Jev](img/{jplot.name}).\n")  # fmt: skip
+
     if benches:
         add("## Head-to-head benchmark (test split, live)\n")
         add("| Pipeline | Route accuracy | Guardrail recall | False refusals | p50 / p95 latency | "
@@ -274,7 +318,7 @@ def write_report(root: Path, results: Path) -> Path:
     fb = benches.get("fallback_llm")
     if fb:
         add("Spot check: five LLM-generated answers from the Fallback + LLM run (fixed random seed), with "
-            "the sections they cite. Reviewed by hand; notes are in the last column.\n")  # fmt: skip
+            "the sections they cite. Not yet reviewed by a person: read each one against its cited section and record what you find.\n")  # fmt: skip
         sample_pool = [r for r in fb[1] if r.llm_called and r.answer]
         random.Random(7).shuffle(sample_pool)
         add("| id | Route | Answer | Cited | Judge |\n|---|---|---|---|---|")

@@ -55,6 +55,7 @@ class BenchRecord:
     expected_citations: list[str] = field(default_factory=list)
     context: str = ""  # what the answer should be grounded in (for the judge)
     error: str | None = None
+    router: str = ""  # which System 1 answered (exposes silent failovers)
     judge_supported: bool | None = None
     judge_reason: str | None = None
 
@@ -102,6 +103,7 @@ async def run_pipeline(pipeline: Pipeline, items: list[EvalItem], name: str) -> 
             citations=rec.citations,
             expected_citations=item.citations,
             context=context,
+            router=rec.router.get("name", ""),
         )
         out.append(r)
         _log(i, len(items), r)
@@ -208,7 +210,10 @@ JUDGE_SYSTEM = (
 
 async def judge_grounding(judge: OllamaLLM, records: list[BenchRecord]) -> None:
     """Fill judge_supported / judge_reason on records whose answer came from an LLM."""
-    todo = [r for r in records if r.llm_called and r.answer and r.context]
+    # Skip answers already judged, so a later run (e.g. Jev) does not re-judge earlier ones.
+    todo = [
+        r for r in records if r.llm_called and r.answer and r.context and r.judge_supported is None
+    ]
     for i, r in enumerate(todo, 1):
         user = f"Plan text:\n{r.context}\n\nAssistant's answer:\n{r.answer}"
         try:
