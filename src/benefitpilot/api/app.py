@@ -24,7 +24,7 @@ app.include_router(members.router)
 @app.get("/thresholds")
 def thresholds() -> dict[str, float]:
     """The routing policy's thresholds, so clients draw the same lines the policy uses."""
-    return asdict(Thresholds.load())
+    return asdict(Thresholds.load(get_settings().router_backend))
 
 
 @app.get("/health")

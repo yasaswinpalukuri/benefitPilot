@@ -208,7 +208,10 @@ JUDGE_SYSTEM = (
 
 async def judge_grounding(judge: OllamaLLM, records: list[BenchRecord]) -> None:
     """Fill judge_supported / judge_reason on records whose answer came from an LLM."""
-    todo = [r for r in records if r.llm_called and r.answer and r.context]
+    # Skip answers already judged, so a later run (e.g. Jev) does not re-judge earlier ones.
+    todo = [
+        r for r in records if r.llm_called and r.answer and r.context and r.judge_supported is None
+    ]
     for i, r in enumerate(todo, 1):
         user = f"Plan text:\n{r.context}\n\nAssistant's answer:\n{r.answer}"
         try:

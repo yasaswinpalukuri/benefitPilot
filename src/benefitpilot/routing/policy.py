@@ -62,12 +62,16 @@ class Thresholds:
     output_grounded_min: float = 0.5
 
     @classmethod
-    def load(cls) -> Thresholds:
+    def load(cls, router: str | None = None) -> Thresholds:
+        """Base thresholds (tuned for the FallbackRouter), with `routers.<router>`
+        overrides on top: each System 1 model gets thresholds tuned on its own
+        probabilities (ADR-029)."""
         raw = yaml.safe_load((CONFIG_DIR / "thresholds.yaml").read_text(encoding="utf-8"))
+        override = (raw.get("routers") or {}).get(router or "", {}) or {}
         return cls(
-            auto_route_min=raw["intent"]["auto_route_min"],
-            refuse_min=raw["medical_advice"]["refuse_min"],
-            emergency_min=raw["urgency"]["emergency_min"],
+            auto_route_min=override.get("auto_route_min", raw["intent"]["auto_route_min"]),
+            refuse_min=override.get("refuse_min", raw["medical_advice"]["refuse_min"]),
+            emergency_min=override.get("emergency_min", raw["urgency"]["emergency_min"]),
             output_medical_advice_max=raw["output_check"]["medical_advice_max"],
             output_grounded_min=raw["output_check"]["grounded_min"],
         )

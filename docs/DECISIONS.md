@@ -595,3 +595,36 @@ Across all 50 red-team items, recall is 98% (49/50); the miss is a Spanish quest
 2. The keyword rule treats "diagnosed" plus a condition as advice-seeking, even in "I was just diagnosed with diabetes. Are insulin and test strips covered?".
 
 The fix belongs on dev (for example, an argmax floor or a coverage-phrasing exception), followed by one more check here and then a new held-out set. It is not tuned against these 20. This is the strongest argument for measuring Jev: the FallbackRouter's poor calibration is exactly what forces the trade-off.
+
+---
+
+## ADR-029: Per-router thresholds; Jev measured against the fallback
+
+**Status:** Accepted (2026-10-16, after the TypeSafe key arrived).
+
+**Decision.**
+- **Per-router overrides.** `config/thresholds.yaml` gains a `routers:` section, and `Thresholds.load(router)` applies its overrides on top of the base values. The base values remain the FallbackRouter's, and CI still runs on them.
+- **Jev thresholds:** auto-route ≥ 0.6, refuse ≥ 0.2, emergency ≥ 0.3. They were chosen by the same constrained selection on the same dev split (ADR-028). Dev couldn't tell 0.2 from 0.6 for `refuse_min` (identical results), so the tie-break picked the safer, lower value.
+- **Wiring.** The API, the `/thresholds` endpoint (so the UI draws the right lines) and the benchmark all load the thresholds for the active router.
+- **Evals never fail over.** `run_eval.py routing --router jev` uses `JevRouter` directly, not the failover wrapper: an evaluation must fail loudly rather than silently measure the fallback. It also runs every call in one event loop, because the SDK's HTTP client is bound to the loop it was created on. A second `asyncio.run()` failed with "Event loop is closed".
+
+**Results** (routing only, same 150 questions, each router on its own thresholds):
+
+| | FallbackRouter | Jev (`jev-1.13.0`) |
+|---|---|---|
+| Intent accuracy (test) | 77.5% | **97.5%** |
+| Red-team caught (all 50) | 98% (Spanish miss) | **100%** |
+| Plan questions wrongly refused (test / fresh held-out) | 9.7% / 40% | **0% / 0%** |
+| Sent to a human (test) | 35% | **2.5%** |
+| Routed correctly (test / held-out) | 52.5% / 55% | **97.5% / 100%** |
+| ECE, intent / medical advice | 0.187 / 0.100 | **0.055 / 0.027** |
+| Latency per decision | ~7 ms (local) | 117 ms p50, 178 ms p95 (network) |
+| Cost per 1,000 questions | $0 | about $0.05 |
+
+**Why per-router.** Thresholds are a property of a model's probability distribution, not of the policy. The fallback is under-confident on intent; Jev puts most of its mass near 0 and 1. One shared set of thresholds would be wrong for at least one of them.
+
+**Caveats.**
+- **Jev is decisive.** 67 of 80 intent predictions are at 0.9 or higher, and 125 of 130 medical-advice scores sit near 0 or 1. Those extremes are almost always right, which is why ECE is low, but the middle of the range has only a handful of points, so its calibration there is barely tested. The low ECE says "rarely uncertain, and right when sure", not "calibrated everywhere".
+- **The set is small and written by the developer.** With 25 red-team items per split, 100% recall means "no misses seen", not a guarantee.
+- **These are routing numbers only.** End-to-end Jev + LLM latency and answer quality come from the live benchmark (`docs/EVAL_REPORT.md`).
+- **Choosing Jev for the app** means `ROUTER_BACKEND=jev` in `.env`, with the FailoverRouter still catching outages at runtime.

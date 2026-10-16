@@ -118,6 +118,20 @@ def test_thresholds_load_from_yaml():
     assert t.emergency_min == raw["urgency"]["emergency_min"]
 
 
+def test_per_router_thresholds_override_the_base():
+    raw = yaml.safe_load((CONFIG_DIR / "thresholds.yaml").read_text(encoding="utf-8"))
+    jev = raw["routers"]["jev"]
+    t = Thresholds.load("jev")
+    assert (t.auto_route_min, t.refuse_min, t.emergency_min) == (
+        jev["auto_route_min"],
+        jev["refuse_min"],
+        jev["emergency_min"],
+    )
+    # Unconfigured routers (and no router) get the base values.
+    assert Thresholds.load("fallback") == Thresholds.load() == Thresholds.load("unknown")
+    assert t.output_grounded_min == Thresholds.load().output_grounded_min
+
+
 def test_medical_as_most_likely_intent_refuses_below_threshold():
     """The argmax rule (ADR-028): an under-confident classifier still ranks options right."""
     d = decisions(

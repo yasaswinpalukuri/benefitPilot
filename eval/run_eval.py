@@ -27,7 +27,7 @@ sys.path.insert(0, str(ROOT))
 from benefitpilot.audit.log import AuditStore  # noqa: E402
 from benefitpilot.config import get_settings  # noqa: E402
 from benefitpilot.evaluation import benchmark, routing  # noqa: E402
-from benefitpilot.evaluation.datasets import load_all  # noqa: E402
+from benefitpilot.evaluation.datasets import load_all, load_holdout  # noqa: E402
 from benefitpilot.evaluation.tuning import constrained_select, total_cost  # noqa: E402
 from benefitpilot.evaluation.violations import evaluate_violations  # noqa: E402
 from benefitpilot.graph.pipeline import Deps, Pipeline  # noqa: E402
@@ -35,6 +35,7 @@ from benefitpilot.llm.client import OllamaLLM  # noqa: E402
 from benefitpilot.retrieval.factory import build_retriever  # noqa: E402
 from benefitpilot.routing.factory import build_router  # noqa: E402
 from benefitpilot.routing.fallback import FallbackRouter  # noqa: E402
+from benefitpilot.routing.jev import JevRouter  # noqa: E402
 from benefitpilot.routing.policy import Thresholds  # noqa: E402
 from benefitpilot.rules.plan_schema import load_plans  # noqa: E402
 from benefitpilot.store import MemberStore  # noqa: E402
@@ -59,22 +60,39 @@ def _store() -> MemberStore:
 
 def cmd_routing(args) -> list[routing.RoutingRecord]:
     settings = get_settings()
-    router = (
-        FallbackRouter()
-        if args.router == "fallback"
-        else build_router(settings.model_copy(update={"router_backend": "jev"}))
-    )
-    recs = asyncio.run(routing.collect(router, load_all(), load_plans(), _store()))
-    path = RESULTS / f"routing_{args.router}.jsonl"
-    routing.save(recs, path)
-    print(f"wrote {len(recs)} decisions to {path.relative_to(ROOT)}")
-    return recs
+
+    async def collect_all():
+        if args.router == "fallback":
+            router = FallbackRouter()
+        else:
+            # The real JevRouter, not the failover wrapper: an eval must fail loudly
+            # rather than silently measure the fallback. One event loop for every call,
+            # because the SDK's HTTP client is bound to the loop it was created on.
+            if settings.typesafe_api_key is None:
+                raise SystemExit("routing --router jev needs TYPESAFE_API_KEY in .env")
+            router = JevRouter(
+                api_key=settings.typesafe_api_key.get_secret_value(), model=settings.jev_model
+            )
+        try:
+            main = await routing.collect(router, load_all(), load_plans(), _store())
+            hold = await routing.collect(router, load_holdout(), load_plans(), _store())
+        finally:
+            if hasattr(router, "aclose"):
+                await router.aclose()
+        return main, hold
+
+    main, hold = asyncio.run(collect_all())
+    for suffix, recs in (("", main), ("_holdout", hold)):
+        path = RESULTS / f"routing_{args.router}{suffix}.jsonl"
+        routing.save(recs, path)
+        print(f"wrote {len(recs)} decisions to {path.relative_to(ROOT)}")
+    return main
 
 
 def cmd_tune(args) -> None:
     recs = routing.load(RESULTS / f"routing_{args.router}.jsonl")
     dev = [r for r in recs if r.item.split == "dev"]
-    current = Thresholds.load()
+    current = Thresholds.load(args.router)
     chosen = constrained_select(dev, current)
     print("current on dev:", total_cost(dev, current).errors)
     if chosen is None:
@@ -123,7 +141,7 @@ def _pipeline(router, settings) -> Pipeline:
             llm=build_llm(settings),
             store=_store(),
             plans=load_plans(),
-            thresholds=Thresholds.load(),
+            thresholds=Thresholds.load(router.name),
             audit=AuditStore(Path(tempfile.mkdtemp()) / "audit.db"),
             today=lambda: EVAL_TODAY,
         )
