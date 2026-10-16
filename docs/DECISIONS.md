@@ -2,6 +2,40 @@
 
 Each record gives the decision, the alternatives considered, why this option won, and the trade-offs. New records are added as each phase lands.
 
+## Index
+
+| ADR | Decision |
+|---|---|
+| [001](#adr-001-system-1--system-2-split-jev-routes-llm-writes-code-computes) | System 1 / System 2 split: Jev routes, LLM writes, code computes |
+| [002](#adr-002-plan-rules-live-in-yaml-booklets-are-hand-written-markdown-kept-in-sync-by-a-test) | Plan rules live in YAML; booklets are hand-written Markdown, kept in sync by a test |
+| [003](#adr-003-strict-validated-plan-schema-pydantic-extraforbid) | Strict, validated plan schema (Pydantic, `extra="forbid"`) |
+| [004](#adr-004-synthetic-claims-are-labeled-by-construction-never-by-the-rules-engine) | Synthetic claims are labeled by construction, never by the rules engine |
+| [005](#adr-005-maximums-cap-what-the-plan-pays-fixed-dates-and-seed-for-reproducibility) | Maximums cap what the plan pays; fixed dates and seed for reproducibility |
+| [006](#adr-006-default-system-2-is-local-ollama-qwen257b-on-a-home-server-anthropic-is-optional) | Default System 2 is local Ollama (qwen2.5:7b on a home server); Anthropic is optional |
+| [007](#adr-007-pip--venv--hatchling-dependencies-added-per-phase) | pip + venv + hatchling; dependencies added per phase |
+| [008](#adr-008-a-health-only-api-in-phase-1) | A `/health`-only API in Phase 1 |
+| [009](#adr-009-the-rules-engine-is-a-pure-function-over-a-member-snapshot) | The rules engine is a pure function over a member snapshot |
+| [010](#adr-010-money-is-decimal-rounded-half-up-to-cents-maximums-are-applied-in-a-fixed-order) | Money is `Decimal`, rounded half-up to cents; maximums are applied in a fixed order |
+| [011](#adr-011-report-every-rule-checked-not-just-the-first-failure-claimscheck-is-read-only) | Report every rule checked, not just the first failure; `/claims/check` is read-only |
+| [012](#adr-012-scope-limits-of-the-phase-2-engine) | Scope limits of the Phase 2 engine |
+| [013](#adr-013-one-chunk-per-plan-section-the-chunk-id-is-the-citation-id) | One chunk per plan section; the chunk ID is the citation ID |
+| [014](#adr-014-nomic-embed-text-over-ollama-an-in-memory-numpy-index-and-bm25-only-as-the-offline-mode) | nomic-embed-text over Ollama, an in-memory numpy index, and BM25-only as the offline mode |
+| [015](#adr-015-rrf-fusion-where-only-meaningful-bm25-matches-vote-a-cosine-based-relevance-gate) | RRF fusion where only meaningful BM25 matches vote; a cosine-based relevance gate |
+| [016](#adr-016-one-typed-question-set-behind-a-decisionrouter-protocol) | One typed question set behind a `DecisionRouter` protocol |
+| [017](#adr-017-jevrouter-pins-jev-1130-relies-on-the-sdks-retry-policy-and-fails-over-to-the-fallback) | JevRouter pins `jev-1.13.0`, relies on the SDK's retry policy, and fails over to the fallback |
+| [018](#adr-018-fallbackrouter-is-tf-idf--logistic-regression-with-high-recall-safety-rules) | FallbackRouter is TF-IDF + logistic regression with high-recall safety rules |
+| [019](#adr-019-the-routing-policy-works-on-raw-probabilities-ordered-by-the-cost-of-each-error) | The routing policy works on raw probabilities, ordered by the cost of each error |
+| [020](#adr-020-a-langgraph-state-machine-where-safety-paths-never-reach-the-llm-and-the-output-check-can-only-make-an-answer-safer) | A LangGraph state machine where safety paths never reach the LLM and the output check can only make an answer safer |
+| [021](#adr-021-offline-relevance-gate-at-bm25--20-separate-from-the-fusion-vote-threshold-amends-adr-015) | Offline relevance gate at BM25 ≥ 2.0, separate from the fusion vote threshold (amends ADR-015) |
+| [022](#adr-022-claim-arguments-are-selected-not-generated-money-is-checked-again-after-phrasing) | Claim arguments are *selected*, not generated; money is checked again after phrasing |
+| [023](#adr-023-system-2-is-local-qwen257b-by-default-the-anthropic-adapter-defaults-to-claude-opus-55-with-refusal-fallbacks) | System 2 is local qwen2.5:7b by default; the Anthropic adapter defaults to Claude Opus 5.5 with refusal fallbacks |
+| [024](#adr-024-audit-log-in-its-own-sqlite-database-full-json-record-plus-indexed-columns-escalations-as-a-queue-table) | Audit log in its own SQLite database: full JSON record plus indexed columns; escalations as a queue table |
+| [025](#adr-025-the-ui-is-a-pure-api-client-and-the-why-this-answer-panel-shows-only-what-the-api-recorded) | The UI is a pure API client, and the "Why this answer?" panel shows only what the API recorded |
+| [026](#adr-026-one-chart-language-for-every-system-1-signal-bugs-found-by-looking-at-the-real-ui) | One chart language for every System 1 signal; bugs found by looking at the real UI |
+| [027](#adr-027-test-the-ui-against-recorded-real-api-responses) | Test the UI against recorded *real* API responses |
+| [028](#adr-028-tune-routing-on-a-dev-split-under-explicit-constraints-refuse-when-medical-advice-is-the-most-likely-intent) | Tune routing on a dev split under explicit constraints; refuse when medical advice is the most likely intent |
+| [029](#adr-029-per-router-thresholds-jev-measured-against-the-fallback) | Per-router thresholds; Jev measured against the fallback |
+
 ---
 
 ## ADR-001: System 1 / System 2 split: Jev routes, LLM writes, code computes
