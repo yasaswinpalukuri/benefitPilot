@@ -136,11 +136,34 @@ def test_claim_without_member_asks_for_one(make):
     assert record.answer == messages.NEED_MEMBER
 
 
-def test_claim_with_unclear_service_asks_for_details(make, member):
+def test_claim_with_unclear_service_asks_only_for_the_service(make, member):
     router = ScriptedRouter(intent="claim_check", category="unclear")
     state, record = ask(make(router), "Will my $60 thing be covered?", member)
-    assert record.answer == messages.NEED_CLAIM_DETAILS
+    assert record.answer.startswith("I can check that $60.00 claim for you, but which type")
     assert record.rule_result is None
+
+
+def test_claim_without_an_amount_asks_only_for_the_amount(make, member):
+    router = ScriptedRouter(intent="claim_check", category="massage_therapy")
+    state, record = ask(make(router), "My massage cost a lot, is it covered?", member)
+    assert "massage therapy claim" in record.answer
+    assert "couldn't find the amount" in record.answer
+    assert record.rule_result is None
+
+
+MASSAGE_Q = (  # asked live: the amount had no "$", so the engine never ran
+    "I have a massage therapy today and it cost around 450 dollars and how much is "
+    "covered and how much more amout will be left if I redeem this"
+)
+
+
+def test_amount_written_in_dollars_reaches_the_rules_engine(make, member):
+    router = ScriptedRouter(intent="claim_check", category="massage_therapy", amount=1)
+    state, record = ask(make(router), MASSAGE_Q, member)
+    assert record.route == "claim_check"
+    assert record.rule_result is not None
+    assert record.rule_result["billed_amount"] == "450.00"
+    assert record.rule_result["category"] == "massage_therapy"
 
 
 def test_ungrounded_claim_answer_falls_back_to_template(make, member):

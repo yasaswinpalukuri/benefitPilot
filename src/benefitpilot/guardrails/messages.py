@@ -45,6 +45,22 @@ NEED_CLAIM_DETAILS = (
 )
 
 
+def need_claim_details(service: str | None, amount: str | None) -> str:
+    """Ask only for what is missing. Asking "which service?" after the member
+    named massage therapy read as if the question had not been understood."""
+    if service and not amount:
+        return (
+            f"I can check that {service.lower()} claim for you, but I couldn't find the "
+            "amount. How much was it (for example $120)?"
+        )
+    if amount and not service:
+        return (
+            f"I can check that {amount} claim for you, but which type of service is it "
+            "(for example physiotherapy or a dental crown)?"
+        )
+    return NEED_CLAIM_DETAILS
+
+
 def escalated(audit_id: str) -> str:
     return (
         "I'm not confident I understood your question correctly, so I've passed it to a benefits "

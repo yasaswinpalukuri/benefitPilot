@@ -26,7 +26,16 @@ CLAIM_AMOUNT = "claim_amount"
 UNCLEAR = "unclear"
 MIN_SELECTION_P = 0.5
 
-AMOUNT_RE = re.compile(r"\$\s?(\d[\d,]*(?:\.\d{1,2})?)")
+_NUMBER = r"\d[\d,]*(?:\.\d{1,2})?"
+# A number counts as money only with a currency marker before or after it: "$450",
+# "CAD 450", "450 dollars", "450$", "450 bucks". Only "$" was recognised at first,
+# so "it cost around 450 dollars" reached the engine with no amount (seen live).
+# Bare numbers stay out: "2 sessions" or "24 months" are not costs.
+AMOUNT_RE = re.compile(
+    rf"(?:\$|\b(?:CAD|USD)\s?)\s?(?P<pre>{_NUMBER})"
+    rf"|(?<![\d.,$])(?P<post>{_NUMBER})\s?(?:\$|dollars?\b|bucks\b|CAD\b|USD\b)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -43,7 +52,7 @@ def find_amounts(text: str, window: int = 40) -> list[AmountCandidate]:
         out.append(
             AmountCandidate(
                 key=f"amount_{i}",
-                amount=Decimal(m.group(1).replace(",", "")),
+                amount=Decimal((m.group("pre") or m.group("post")).replace(",", "")),
                 context=text[start:end].strip(),
             )
         )

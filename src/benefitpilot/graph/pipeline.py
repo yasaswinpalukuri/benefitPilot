@@ -160,9 +160,14 @@ class Pipeline:
         if not s.get("plan_id"):
             return {"answer": messages.NEED_MEMBER, "citations": []}
         args = read_claim_args(s["decisions"], s["question"])
-        if not args.complete:
-            return {"answer": messages.NEED_CLAIM_DETAILS, "citations": [], "claim_args": args}
         plan = self.deps.plans[s["plan_id"]]
+        if not args.complete:
+            category = plan.categories.get(args.category or "")
+            answer = messages.need_claim_details(
+                category.label if category else None,
+                f"${args.amount:,.2f}" if args.amount is not None else None,
+            )
+            return {"answer": answer, "citations": [], "claim_args": args}
         today = self.deps.today()
         snapshot = self.deps.store.snapshot(s["member_id"], today.year)
         result = check_claim(
