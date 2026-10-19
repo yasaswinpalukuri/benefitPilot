@@ -41,6 +41,7 @@ EXAMPLES = [
     "How do I submit a claim for dental?",
     "My chest hurts, what medication should I take?",
 ]
+GENERAL = "__general__"  # the "no member" choice, and its conversation's key
 SYNTHETIC_NOTE = (
     "**Synthetic data only.** Every plan, member and claim here is fictional. "
     "BenefitPilot explains what a plan covers; it never gives medical advice."
@@ -82,16 +83,19 @@ def render_sidebar(api: api_client.BenefitPilotAPI) -> str | None:
         st.sidebar.error(md(str(e)))
         return None
 
-    options = [None] + [m["member_id"] for m in members]
+    # A string sentinel, not None: Streamlit shows a None option as an empty
+    # "Choose an option" box, so "no member" could not be picked again.
+    options = [GENERAL] + [m["member_id"] for m in members]
     by_id = {m["member_id"]: m for m in members}
 
     def label(mid):
-        if mid is None:
+        if mid == GENERAL:
             return "No member (general plan questions)"
         m = by_id[mid]
         return f"{mid} · {m['name']} · {m['plan_name']}"
 
-    member_id = st.sidebar.selectbox("Member", options, format_func=label, key="member_id")
+    choice = st.sidebar.selectbox("Member", options, format_func=label, key="member_id")
+    member_id = None if choice == GENERAL else choice
     if member_id:
         render_usage(api, member_id)
     st.sidebar.divider()
@@ -312,32 +316,37 @@ def render_retrieval(resp: dict, audit: dict | None) -> None:
 # --- chat ---------------------------------------------------------------------------
 
 
+def history(member_id: str | None) -> list[dict]:
+    """One conversation per member. A single shared history hid the example
+    buttons after the first question and mixed one member's answers into
+    another's, so switching members looked like it did nothing."""
+    return st.session_state.chats.setdefault(member_id or GENERAL, [])
+
+
 def ask(api: api_client.BenefitPilotAPI, question: str, member_id: str | None) -> None:
-    st.session_state.messages.append({"role": "user", "content": question})
+    messages = history(member_id)
+    messages.append({"role": "user", "content": question})
     with st.spinner("Thinking… (the local model runs on a CPU, so allow ~30 s)"):
         try:
             resp = api.ask(question, member_id)
             audit = api.audit(resp["audit_id"])
         except api_client.APIError as e:
-            st.session_state.messages.append(
-                {"role": "assistant", "content": f"⚠️ {e}", "resp": None}
-            )
+            messages.append({"role": "assistant", "content": f"⚠️ {e}", "resp": None})
             return
-    st.session_state.messages.append(
-        {"role": "assistant", "content": resp["answer"], "resp": resp, "audit": audit}
-    )
+    messages.append({"role": "assistant", "content": resp["answer"], "resp": resp, "audit": audit})
 
 
 def render_chat(api: api_client.BenefitPilotAPI, member_id: str | None, thresholds: dict) -> None:
-    if not st.session_state.messages:
+    messages = history(member_id)
+    if not messages:
         st.markdown("Try one of these:")
         cols = st.columns(len(EXAMPLES))
         for col, q in zip(cols, EXAMPLES, strict=True):
-            if col.button(md(q), width="stretch"):
+            if col.button(md(q), width="stretch", key=f"example-{member_id}-{q}"):
                 ask(api, q, member_id)
                 st.rerun()
 
-    for i, m in enumerate(st.session_state.messages):
+    for i, m in enumerate(messages):
         with st.chat_message(m["role"]):
             st.markdown(md(m["content"]))
             resp = m.get("resp")
@@ -347,14 +356,8 @@ def render_chat(api: api_client.BenefitPilotAPI, member_id: str | None, threshol
                     f"{ROUTE_LABELS.get(resp['route'], resp['route'])}"
                     + (f" · {cites}" if cites else "")
                 )
-                with st.expander(
-                    "Why this answer?", expanded=(i == len(st.session_state.messages) - 1)
-                ):
+                with st.expander("Why this answer?", expanded=(i == len(messages) - 1)):
                     render_why(resp, m.get("audit"), thresholds)
-
-    if question := st.chat_input("Ask about your coverage or a claim"):
-        ask(api, question, member_id)
-        st.rerun()
 
 
 def render_escalations(api: api_client.BenefitPilotAPI) -> None:
@@ -380,7 +383,7 @@ def render_escalations(api: api_client.BenefitPilotAPI) -> None:
 
 def main() -> None:
     api = get_api()
-    st.session_state.setdefault("messages", [])
+    st.session_state.setdefault("chats", {})
     member_id = render_sidebar(api)
     try:
         thresholds = api.thresholds()
@@ -393,6 +396,11 @@ def main() -> None:
     with queue_tab:
         render_escalations(api)
     st.caption(SYNTHETIC_NOTE)
+    # Outside the tabs, so Streamlit pins it to the bottom of the page: inside a tab
+    # it sat below the last "Why this answer?" panel, out of sight.
+    if question := st.chat_input("Ask about your coverage or a claim"):
+        ask(api, question, member_id)
+        st.rerun()
 
 
 main()

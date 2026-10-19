@@ -200,6 +200,40 @@ def test_emergency_shows_route_and_no_llm(ui):
     assert "Rules engine" not in text and "Retrieved plan sections" not in text
 
 
+def _select(at, member_id):
+    label = next(o for o in at.sidebar.selectbox[0].options if o.startswith(member_id))
+    at.sidebar.selectbox[0].select(label).run()
+
+
+def test_each_member_gets_their_own_conversation(ui, recorded):
+    """Seen live: after one question the examples vanished and switching members
+    seemed to do nothing. Each member now has a fresh chat, and switching back
+    restores theirs."""
+    first = recorded["member"]
+    other = next(m["member_id"] for m in recorded["members"] if m["member_id"] != first)
+    _select(ui, first)
+    _button(ui, CLAIM_Q).click().run()
+    assert len(ui.chat_message) == 2
+
+    _select(ui, other)
+    assert not ui.chat_message  # fresh chat, examples are back
+    _button(ui, COVER_Q).click().run()
+    assert FakeAPI.asked == [(CLAIM_Q, first), (COVER_Q, other)]
+    assert CLAIM_A not in _all_text(ui)
+
+    _select(ui, first)
+    assert CLAIM_A in _all_text(ui) and COVER_A not in _all_text(ui)
+
+
+def test_no_member_can_be_picked_again(ui, recorded):
+    """A None option rendered as an empty "Choose an option" box in Streamlit."""
+    assert ui.sidebar.selectbox[0].value == "__general__"  # a real option, not None
+    _select(ui, recorded["member"])
+    ui.sidebar.selectbox[0].select("No member (general plan questions)").run()
+    ui.chat_input[0].set_value("my chest hurts").run()
+    assert FakeAPI.asked == [("my chest hurts", None)]
+
+
 def test_escalation_tab_renders(ui):
     assert [t.label for t in ui.tabs] == ["Chat", "Escalation queue"]
 
